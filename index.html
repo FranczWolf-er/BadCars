@@ -1,0 +1,1420 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f766e">
+<title>BadCars – evidence provozu auta</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-180.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BadCars">
+<script src="config.js"></script>
+<style>
+:root{
+  --bg:#f4f6f7;--card:#fff;--ink:#14201f;--mute:#5b6b69;--line:#dbe2e1;
+  --acc:#0f766e;--acc-ink:#fff;--fuel:#0f766e;--svc:#d97706;
+  --ok:#166534;--okbg:#dcfce7;--soon:#92400e;--soonbg:#fef3c7;--late:#991b1b;--latebg:#fee2e2;
+  --danger:#b91c1c;
+}
+@media (prefers-color-scheme:dark){
+  :root{--bg:#0e1514;--card:#17211f;--ink:#e6efed;--mute:#9db0ad;--line:#2a3836;
+  --acc:#2dd4bf;--acc-ink:#042f2a;--fuel:#2dd4bf;--svc:#fbbf24;
+  --ok:#86efac;--okbg:#14351f;--soon:#fcd34d;--soonbg:#3b2a0a;--late:#fca5a5;--latebg:#431414;--danger:#f87171;}
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
+header{position:sticky;top:0;z-index:5;display:flex;gap:8px;align-items:center;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;background:var(--card);border-bottom:1px solid var(--line)}
+header select{flex:1;min-width:0;font:inherit;font-weight:600;padding:8px 10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.sync{font-size:11px;color:var(--mute);white-space:nowrap}.sync.local,.sync.err{color:var(--soon)}
+.iconbtn{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:8px 12px;font:inherit;cursor:pointer}
+main{max-width:640px;margin:0 auto;padding:12px 12px calc(84px + env(safe-area-inset-bottom))}
+nav{position:fixed;left:0;right:0;bottom:0;z-index:5;display:flex;background:var(--card);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;min-width:0;border:0;background:none;color:var(--mute);font:inherit;font-size:11px;padding:12px 0;cursor:pointer}
+nav button[aria-current=page]{color:var(--acc);font-weight:700;box-shadow:inset 0 3px 0 var(--acc)}
+h2{font-size:15px;margin:18px 2px 8px;color:var(--mute);font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px}
+.k{font-size:12px;color:var(--mute)}
+.v{font-size:22px;font-weight:700;margin-top:2px}
+.v small{font-size:13px;font-weight:500;color:var(--mute)}
+.sub{font-size:12px;color:var(--mute);margin-top:2px}
+.actions{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0}
+.btn{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:11px 14px;font:inherit;font-weight:600;cursor:pointer}
+.btn.primary{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.btn.danger{color:var(--danger);border-color:var(--danger)}
+.actions .btn{flex:1;white-space:nowrap}
+.list{display:flex;flex-direction:column;gap:6px}
+.row{display:block;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;color:var(--ink);font:inherit;cursor:pointer}
+.row .r1{display:flex;justify-content:space-between;gap:8px}
+.row .r2{font-size:13px;color:var(--mute);margin-top:2px}
+.chip{display:inline-block;font-size:12px;font-weight:700;border-radius:99px;padding:2px 9px}
+.pri{font-size:11px;font-weight:700;padding:1px 6px;border-radius:6px;margin-left:6px;white-space:nowrap;vertical-align:1px}.pri.high{background:var(--latebg);color:var(--late)}.pri.low{background:var(--line);color:var(--mute)}
+.chip.ok{background:var(--okbg);color:var(--ok)}.chip.soon{background:var(--soonbg);color:var(--soon)}.chip.late{background:var(--latebg);color:var(--late)}
+.empty{color:var(--mute);text-align:center;padding:22px 10px;background:var(--card);border:1px dashed var(--line);border-radius:12px}
+.bars{display:flex;flex-direction:column;gap:6px}
+.bar{display:grid;grid-template-columns:64px 1fr auto;gap:8px;align-items:center;font-size:13px}
+.bar .t{height:14px;background:var(--bg);border-radius:7px;overflow:hidden;display:flex}
+.bar .t i{display:block;height:100%}
+.legend{display:flex;gap:14px;font-size:12px;color:var(--mute);margin:0 0 8px}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.banner{background:var(--soonbg);color:var(--soon);border-radius:10px;padding:10px 12px;font-size:14px;margin-bottom:10px}
+/* sheet */
+#sheet{position:fixed;inset:0;z-index:20;display:none}
+#sheet.open{display:block}
+.scrim{position:absolute;inset:0;background:rgba(0,0,0,.45)}
+.panel{position:absolute;left:0;right:0;bottom:0;max-height:92vh;display:flex;flex-direction:column;background:var(--card);border-radius:18px 18px 0 0;max-width:640px;margin:0 auto}
+.ph{display:flex;justify-content:space-between;align-items:center;padding:14px 16px 6px}
+.ph h2{margin:0;font-size:18px;color:var(--ink);text-transform:none;letter-spacing:0}
+.x{border:0;background:none;color:var(--mute);font-size:20px;padding:4px 8px;cursor:pointer}
+.pb{overflow:auto;padding:6px 16px 10px}
+.pf{display:flex;gap:8px;padding:10px 16px calc(12px + env(safe-area-inset-bottom));border-top:1px solid var(--line)}
+.pf .btn{flex:1}
+label{display:block;font-size:13px;color:var(--mute);margin:10px 0 4px}
+input,textarea,select.f{width:100%;font:inherit;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+textarea{min-height:140px;font:12px/1.3 ui-monospace,monospace}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.chk{display:flex;align-items:center;gap:10px;margin-top:12px;color:var(--ink);font-size:16px}
+.chk input{width:22px;height:22px}
+.err{color:var(--danger);font-size:14px;margin:8px 0 0;min-height:1em}
+.seg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden;margin:12px 0}.seg button{flex:1;border:0;background:var(--card);color:var(--mute);font:inherit;font-weight:600;padding:10px;cursor:pointer}.seg button[aria-pressed=true]{background:var(--acc);color:var(--acc-ink)}
+.kv{display:flex;justify-content:space-between;gap:12px;padding:8px 0;border-bottom:1px solid var(--line);font-size:15px}.kv span:first-child{color:var(--mute)}.kv b{text-align:right;word-break:break-word}
+.big{font-size:26px;font-weight:700}.res{margin-top:14px;display:flex;flex-direction:column;gap:6px}.res .line{display:flex;justify-content:space-between;gap:10px;border-bottom:1px solid var(--line);padding:6px 0;font-size:15px}.res .line span:first-child{color:var(--mute)}
+.chips button[aria-pressed=true]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
+.yc{width:100%;border-collapse:collapse;font-size:13px}.yc th,.yc td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}.yc th:first-child,.yc td:first-child{text-align:left;white-space:normal}.yc th{color:var(--mute);font-weight:600}.yc small{color:var(--mute)}
+.helpbar{background:var(--okbg);color:var(--ink);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:14px;display:flex;align-items:center;justify-content:space-between}.grid.helpon .card{outline:2px dashed var(--acc);outline-offset:-2px;cursor:help}
+.lc{width:100%;height:auto;display:block}.lc text{fill:var(--mute);font-size:10px}.lc .g{stroke:var(--line);stroke-width:1}.lc .ln{fill:none;stroke:var(--fuel);stroke-width:2.2;stroke-linejoin:round}.lc .av{stroke:var(--svc);stroke-width:1.2;stroke-dasharray:4 3}.lc circle.d{fill:var(--card);stroke:var(--fuel);stroke-width:2}.lc circle.h{fill:transparent;cursor:pointer}
+.tiles-ed .row2{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line)}.tiles-ed label{flex:1;margin:0;display:flex;gap:8px;align-items:center;font-size:15px;color:var(--ink)}.tiles-ed .mv{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;width:36px;height:34px;font-size:15px;cursor:pointer}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.chips button{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:99px;padding:5px 11px;font:inherit;font-size:13px;cursor:pointer}
+</style>
+</head>
+<body>
+<header>
+  <select id="veh" aria-label="Vozidlo"></select>
+  <span id="sync" class="sync" role="status"></span>
+  <button class="iconbtn" data-act="settings" aria-label="Nastavení">⚙</button>
+</header>
+<main id="main"></main>
+<nav id="nav"></nav>
+<div id="sheet"></div>
+
+<script>
+'use strict';
+const $=s=>document.querySelector(s);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Math.random().toString(36).slice(2,10));
+
+/* ---------- úložiště ---------- */
+const KEY='badcars.v1';
+let storageOk=true;
+function loadDb(){try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s);}catch(e){storageOk=false;}return null;}
+let db=loadDb()||{v:1,vehicles:[],fuelings:[],odos:[],repairs:[],tasks:[],fixed:[],tires:[],tireEvents:[],parts:[],trips:[],activeVehicle:null};
+db.fixed=db.fixed||[];db.tires=db.tires||[];db.tireEvents=db.tireEvents||[];db.parts=db.parts||[];db.trips=db.trips||[];
+function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){storageOk=false;}}
+function persist(){persistLocal();schedulePush();}
+const touch=r=>{r.updatedAt=Date.now();return r;};
+function saveSettings(o){db.settings=Object.assign({},db.settings||{},o,{updatedAt:Date.now()});persist();}
+function adoptSettings(x){if(x&&typeof x==='object'&&(x.updatedAt||0)>((db.settings||{}).updatedAt||0)){db.settings=JSON.parse(JSON.stringify(x));persistLocal();return true;}return false;}
+const newerSettings=(a,b)=>!a?b:(!b?a:((b.updatedAt||0)>(a.updatedAt||0)?b:a));
+
+// <calc>
+const DAY=864e5;
+const pd=s=>{const a=s.split('-').map(Number);return new Date(a[0],a[1]-1,a[2]);};
+const isoD=d=>d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+const todayIso=()=>isoD(new Date());
+function addMonths(s,n){const a=s.split('-').map(Number);const t=new Date(a[0],a[1]-1+n,1);const dim=new Date(t.getFullYear(),t.getMonth()+1,0).getDate();t.setDate(Math.min(a[2],dim));return isoD(t);}
+const live=(k,vid)=>db[k].filter(x=>!x.deleted&&x.vehicleId===vid);
+const vehicleById=id=>db.vehicles.find(v=>v.id===id&&!v.deleted);
+function odoPoints(vid){
+  const p=[],v=vehicleById(vid);
+  if(v&&v.startOdo!=null)p.push({id:v.id,date:v.startDate||todayIso(),odo:v.startOdo,src:'start'});
+  live('fuelings',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'fuel'}));
+  live('odos',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'odo'}));
+  live('repairs',vid).forEach(f=>{if(f.odo!=null)p.push({id:f.id,date:f.date,odo:f.odo,src:'repair'});});
+  live('tireEvents',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'tire'}));
+  live('trips',vid).forEach(f=>{if(f.odoStart!=null)p.push({id:f.id+'-s',date:f.date,odo:f.odoStart,src:'trip'});if(f.odoEnd!=null)p.push({id:f.id,date:f.date,odo:f.odoEnd,src:'trip'});});
+  live('parts',vid).forEach(f=>{if(f.odo!=null)p.push({id:f.id,date:f.date,odo:f.odo,src:'part'});if(f.removedOdo!=null&&f.removedDate)p.push({id:f.id+'-r',date:f.removedDate,odo:f.removedOdo,src:'part'});});
+  return p;
+}
+function currentOdo(vid){const p=odoPoints(vid);return p.length?Math.max.apply(null,p.map(x=>x.odo)):null;}
+function checkOdo(vid,date,odo,excludeId){
+  for(const p of odoPoints(vid)){
+    if(p.id===excludeId||p.src==='start')continue;
+    if(p.date<date&&p.odo>odo)return 'Starší záznam ('+fdate(p.date)+') má vyšší stav: '+nf(p.odo)+' km.';
+    if(p.date>date&&p.odo<odo)return 'Novější záznam ('+fdate(p.date)+') má nižší stav: '+nf(p.odo)+' km.';
+  }
+  return null;
+}
+function fuelSegments(vid){
+  const fuels=live('fuelings',vid).sort((a,b)=>a.odo-b.odo||a.date.localeCompare(b.date));
+  const segs=[];let base=null,acc=0;
+  for(const f of fuels){
+    if(base===null){if(f.full)base=f;continue;}
+    acc+=f.liters;
+    if(f.full){
+      const km=f.odo-base.odo;
+      if(km>0&&acc>0)segs.push({id:f.id,date:f.date,odo:f.odo,km:km,liters:acc,l100:acc/km*100});
+      base=f;acc=0;
+    }
+  }
+  return segs;
+}
+function consStats(segs){
+  const agg=a=>{const L=a.reduce((s,x)=>s+x.liters,0),K=a.reduce((s,x)=>s+x.km,0);return K>0?L/K*100:null;};
+  return {last:segs.length?segs[segs.length-1].l100:null,avg5:segs.length?agg(segs.slice(-5)):null,avg:segs.length?agg(segs):null};
+}
+function sortedFuels(vid){return live('fuelings',vid).sort((a,b)=>a.odo-b.odo||a.date.localeCompare(b.date));}
+function approxCons(vid,n){
+  const f=sortedFuels(vid);if(f.length<2||(n&&f.length<n+1))return null;
+  const w=n?f.slice(-(n+1)):f,km=w[w.length-1].odo-w[0].odo;
+  if(km<=0)return null;
+  return w.slice(1).reduce((s,x)=>s+x.liters,0)/km*100;
+}
+function rollingCons(vid,n){
+  const f=sortedFuels(vid),out=[];
+  for(let i=n;i<f.length;i++){const w=f.slice(i-n,i+1),km=w[n].odo-w[0].odo;if(km>0)out.push({id:f[i].id,date:f[i].date,l100:w.slice(1).reduce((s,x)=>s+x.liters,0)/km*100});}
+  return out;
+}
+function periodStats(vid,ym){
+  const f=sortedFuels(vid),inP=d=>!ym||d.startsWith(ym);
+  const inside=f.filter(x=>inP(x.date)),before=ym?f.filter(x=>x.date<ym):[];
+  const reps=live('repairs',vid).filter(r=>inP(r.date));
+  const out={n:inside.length,spent:sumCost(inside),liters:inside.reduce((s,x)=>s+x.liters,0),rep:reps.reduce((s,r)=>s+repCost(r),0),repN:reps.length,km:0,fixed:0,allPerKm:null,l100:null,fuelPerKm:null,totalPerKm:null};
+  if(!inside.length)return out;
+  const baseBefore=before.length?before[before.length-1]:null,base=baseBefore||inside[0];
+  const list=baseBefore?inside:inside.slice(1),last=inside[inside.length-1];
+  out.km=last.odo-base.odo;
+  if(out.km>0&&list.length){
+    const L=list.reduce((s,x)=>s+x.liters,0),C=sumCost(list);
+    const repKm=reps.filter(r=>r.date<=last.date).reduce((s,r)=>s+repCost(r),0);
+    out.fixed=fixedShare(vid,base.date,last.date);
+    out.l100=L/out.km*100;out.fuelPerKm=C/out.km;out.totalPerKm=(C+repKm)/out.km;out.allPerKm=(C+repKm+out.fixed)/out.km;
+  }
+  return out;
+}
+function fixedShare(vid,a,b){
+  const items=live('fixed',vid);if(!items.length||!a||!b||a>b)return 0;
+  let tot=0;
+  for(let y=+a.slice(0,4);y<=+b.slice(0,4);y++){
+    const sum=items.filter(x=>x.year===y).reduce((s,x)=>s+(x.amount||0),0);if(!sum)continue;
+    const ys=a>y+'-01-01'?a:y+'-01-01',ye=b<y+'-12-31'?b:y+'-12-31';
+    const days=Math.round((pd(ye)-pd(ys))/DAY)+1;if(days<=0)continue;
+    const diy=(y%4===0&&y%100!==0)||y%400===0?366:365;tot+=sum*days/diy;
+  }
+  return tot;
+}
+const isOneTime=t=>!t.intervalKm&&!t.intervalMonths;
+function tireKm(vid){
+  const ev=live('tireEvents',vid).sort((a,b)=>a.date.localeCompare(b.date)||a.odo-b.odo),cur=currentOdo(vid),km={},open={};
+  const close=(id,odo)=>{if(open[id]!=null){if(odo>open[id])km[id]=(km[id]||0)+odo-open[id];delete open[id];}};
+  ev.forEach(e=>{
+    if(e.type==='off')close(e.tireId,e.odo);
+    else{Object.keys(open).forEach(id=>{if(id!==e.tireId)close(id,e.odo);});if(open[e.tireId]==null)open[e.tireId]=e.odo;}
+  });
+  const mounted=Object.keys(open);
+  mounted.forEach(id=>{if(cur!=null&&cur>open[id])km[id]=(km[id]||0)+cur-open[id];});
+  return {km:km,mountedId:mounted.length?mounted[0]:null,mounted:mounted,events:ev};
+}
+function dotAge(dot){
+  const m=/^(\d{2})(\d{2})$/.exec(String(dot||'').trim());if(!m)return null;
+  const w=+m[1],y=2000+ +m[2];if(w<1||w>53)return null;
+  return (Date.now()-new Date(y,0,1+(w-1)*7).getTime())/(365.25*DAY);
+}
+function lastTread(t){const a=(t.treads||[]).slice().sort((x,y)=>x.date.localeCompare(y.date));return a.length?a[a.length-1]:null;}
+function rangeStats(vid,a,b){
+  const f=sortedFuels(vid),inR=d=>d>=a&&d<=b,inside=f.filter(x=>inR(x.date)),before=f.filter(x=>x.date<a);
+  const reps=live('repairs',vid).filter(r=>inR(r.date)),fuel=sumCost(inside),rep=reps.reduce((s,r)=>s+repCost(r),0),liters=inside.reduce((s,x)=>s+x.liters,0);
+  const base=before.length?before[before.length-1]:inside[0],last=inside[inside.length-1];
+  const km=inside.length&&last.odo>base.odo?last.odo-base.odo:0,list=before.length?inside:inside.slice(1),L=list.reduce((s,x)=>s+x.liters,0);
+  const fixed=fixedShare(vid,a,b),total=fuel+rep+fixed;
+  return {km:km,fuel:fuel,rep:rep,fixed:fixed,total:total,liters:liters,n:inside.length,l100:km>0&&L>0?L/km*100:null,perKm:km>0?total/km:null,price:liters>0?fuel/liters:null};
+}
+function yearCompare(v){
+  const today=todayIso(),cy=today.slice(0,4),md=today.slice(5);
+  const ys=periodYears(v).slice().sort();if(ys.length<2)return '';
+  const show=ys.slice(-3);
+  const full=show.map(y=>({y:y,s:rangeStats(v,y+'-01-01',y===cy?today:y+'-12-31')}));
+  const prev=String(+cy-1),hasCy=show.indexOf(cy)>=0&&ys.indexOf(prev)>=0;
+  const ytdPrev=hasCy?rangeStats(v,prev+'-01-01',prev+'-'+md):null,cur=hasCy?full[full.length-1].s:null;
+  const M=[['km','Ujeto','km',0,null],['fuel','Palivo','Kč',0,1],['rep','Servis','Kč',0,1],['fixed','Fixní náklady','Kč',0,1],['total','Celkem','Kč',0,1],['l100','Spotřeba','l/100',1,1],['price','Cena paliva','Kč/l',2,1],['perKm','Celkem na km','Kč/km',2,1]];
+  const fmt=(x,d)=>x==null?'–':nf(x,d);
+  const delta=(a,b,bad)=>{if(a==null||b==null||!b)return '<td>–</td>';const d=(a-b)/b*100,up=d>0,c=Math.abs(d)<2||bad==null?'':((up===!!bad)?'late':'ok');return '<td><span class="chip '+c+'" style="font-size:12px">'+(Math.abs(d)<0.5?'≈ 0':(up?'▲ +':'▼ ')+nf(d,0))+' %</span></td>';};
+  let h='<h2>Porovnání let</h2><div class="card" style="overflow-x:auto"><table class="yc"><thead><tr><th></th>'+full.map(o=>'<th>'+o.y+(o.y===cy?'*':'')+'</th>').join('')+(hasCy?'<th>vs. loni</th>':'')+'</tr></thead><tbody>'
+    +M.map(m=>'<tr><td>'+m[1]+' <small>'+m[2]+'</small></td>'+full.map(o=>'<td>'+fmt(o.s[m[0]],m[3])+'</td>').join('')+(hasCy?delta(cur[m[0]],ytdPrev[m[0]],m[4]):'')+'</tr>').join('')
+    +'</tbody></table></div>';
+  if(hasCy)h+='<p class="sub" style="margin:6px 2px 0">* '+cy+' zatím do '+fdate(today)+'. Sloupec „vs. loni" porovnává se stejným obdobím loňského roku (1. 1. – '+fdate(prev+'-'+md)+'), takže je férový i v půlce roku. U nákladů a spotřeby je zeleně pokles, červeně nárůst.</p>';
+  return h;
+}
+function periodYears(vid){
+  const set={};live('fuelings',vid).concat(live('repairs',vid)).forEach(x=>{set[x.date.slice(0,4)]=1;});
+  return Object.keys(set).sort().reverse();
+}
+const sumCost=a=>a.reduce((s,x)=>s+(x.total||0),0);
+const repCost=r=>(r.parts||0)+(r.labor||0);
+function costStats(vid){
+  const fuels=live('fuelings',vid).sort((a,b)=>a.odo-b.odo||a.date.localeCompare(b.date));
+  if(fuels.length<2)return null;
+  const first=fuels[0],last=fuels[fuels.length-1],km=last.odo-first.odo;
+  if(km<=0)return null;
+  const fuel=sumCost(fuels.slice(1));
+  const rep=live('repairs',vid).filter(r=>r.date>=first.date&&r.date<=last.date).reduce((s,r)=>s+repCost(r),0);
+  return {km:km,fuel:fuel,rep:rep,fuelPerKm:fuel/km,totalPerKm:(fuel+rep)/km};
+}
+function dailyKm(vid){
+  const p=odoPoints(vid).sort((a,b)=>a.date.localeCompare(b.date)||a.odo-b.odo);
+  if(p.length<2)return null;
+  const a=p[0],b=p[p.length-1];
+  const days=Math.round((pd(b.date)-pd(a.date))/DAY),km=Math.max.apply(null,p.map(x=>x.odo))-Math.min.apply(null,p.map(x=>x.odo));
+  return days>=7&&km>0?km/days:null;
+}
+const PRIO={high:['Vysoká',0,2],normal:['Běžná',1,1],low:['Nízká',2,0.5]};
+const prioOf=t=>PRIO[t&&t.priority]?t.priority:'normal';
+const STRANK={late:0,soon:1,ok:2};
+const taskCmp=(a,b)=>(STRANK[a.info.status]-STRANK[b.info.status])||(PRIO[prioOf(a.t)][1]-PRIO[prioOf(b.t)][1])||(a.info.sort-b.info.sort);
+const cfg=()=>Object.assign({days:30,daysOne:90,kmPct:10,kmOne:1000},db.settings||{});
+function taskInfo(t,cur,daily){
+  const C=cfg();
+  const r={km:null,days:null,nextKm:null,nextDate:null,estDays:null,status:'ok',sort:1e9};
+  const one=isOneTime(t);
+  if(one){
+    if(t.dueKm!=null&&cur!=null){r.nextKm=t.dueKm;r.km=t.dueKm-cur;}
+    if(t.dueDate){r.nextDate=t.dueDate;r.days=Math.round((pd(t.dueDate)-pd(todayIso()))/DAY);}
+  }else{
+    if(t.intervalKm&&t.lastOdo!=null&&cur!=null){r.nextKm=t.lastOdo+t.intervalKm;r.km=r.nextKm-cur;}
+    if(t.intervalMonths&&t.lastDate){r.nextDate=addMonths(t.lastDate,t.intervalMonths);r.days=Math.round((pd(r.nextDate)-pd(todayIso()))/DAY);}
+  }
+  if(r.km!=null&&daily)r.estDays=Math.round(r.km/daily);
+  const eff=[r.days,r.estDays].filter(x=>x!=null);
+  const minDays=eff.length?Math.min.apply(null,eff):null;
+  const thr=t.intervalKm?C.kmPct/100*t.intervalKm:C.kmOne;
+  if((r.km!=null&&r.km<0)||(r.days!=null&&r.days<0))r.status='late';
+  else if((r.km!=null&&r.km<=thr)||(r.days!=null&&r.days<=(isOneTime(t)?C.daysOne:C.days))||(r.estDays!=null&&r.estDays<=(isOneTime(t)?C.daysOne:C.days)))r.status='soon';
+  r.sort=({late:0,soon:1,ok:2})[r.status]*1e6+(minDays!=null?minDays:(r.km!=null?r.km/30:1e5));
+  return r;
+}
+const rankMonths=(vid,n)=>{
+  const out=[],d=new Date();d.setDate(1);
+  for(let i=n-1;i>=0;i--){const t=new Date(d.getFullYear(),d.getMonth()-i,1);out.push({key:isoD(t).slice(0,7),fuel:0,svc:0});}
+  live('fuelings',vid).forEach(f=>{const m=out.find(x=>x.key===f.date.slice(0,7));if(m)m.fuel+=f.total||0;});
+  live('repairs',vid).forEach(r=>{const m=out.find(x=>x.key===r.date.slice(0,7));if(m)m.svc+=repCost(r);});
+  return out;
+};
+const cnum=x=>{const t=String(x==null?'':x).replace(/\s/g,'').replace(',','.');if(t==='')return null;const n=Number(t);return isNaN(n)?null:n;};
+function tco(vid){
+  const car=vehicleById(vid),c=(car&&car.card)||{};
+  const dates=live('fuelings',vid).map(f=>f.date).concat(live('repairs',vid).map(r=>r.date),odoPoints(vid).map(p=>p.date)).sort();
+  const from=c.buyDate||dates[0],to=c.sellDate||todayIso();
+  if(!from||from>to)return null;
+  const inR=d=>d>=from&&d<=to;
+  const fuel=sumCost(live('fuelings',vid).filter(f=>inR(f.date))),rep=live('repairs',vid).filter(r=>inR(r.date)).reduce((s,r)=>s+repCost(r),0),fixed=fixedShare(vid,from,to);
+  const buy=cnum(c.buyPrice),sell=cnum(c.sellPrice),est=cnum(c.curValue),resid=sell!=null?sell:est;
+  const deprec=buy!=null?buy-(resid||0):0;
+  const pts=odoPoints(vid).map(p=>p.odo),o0=cnum(c.buyOdo)!=null?cnum(c.buyOdo):(car&&car.startOdo!=null?car.startOdo:(pts.length?Math.min.apply(null,pts):null)),cur=currentOdo(vid);
+  const km=o0!=null&&cur!=null?cur-o0:null,days=Math.max(1,Math.round((pd(to)-pd(from))/DAY)+1);
+  const operating=fuel+rep+fixed,total=operating+deprec;
+  return {from:from,to:to,days:days,km:km,fuel:fuel,rep:rep,fixed:fixed,buy:buy,resid:resid,residKind:sell!=null?'sell':(est!=null?'est':null),deprec:deprec,operating:operating,total:total,
+    perKm:km>0?total/km:null,opPerKm:km>0?operating/km:null,perYear:days>=30?total/days*365.25:null,perMonth:days>=30?total/days*30.44:null,opPerMonth:days>=30?operating/days*30.44:null};
+}
+const METRICS=[['l100','Spotřeba','l/100 km',1],['kml','Km na litr','km/l',2],['price','Cena paliva','Kč/l',2],['costkm','Palivo na km','Kč/km',2],['month','Náklady měsíčně','Kč',0]];
+function lineSeries(vid,m){
+  const f=sortedFuels(vid);
+  if(m==='l100'||m==='kml'){
+    const ex=fuelSegments(vid),src=ex.length>=3?ex:rollingCons(vid,5);
+    return src.map(x=>({date:x.date,v:m==='l100'?x.l100:100/x.l100}));
+  }
+  if(m==='price')return f.filter(x=>x.liters>0).sort((a,b)=>a.date.localeCompare(b.date)).map(x=>({date:x.date,v:x.total/x.liters}));
+  if(m==='costkm'){
+    const n=Math.min(3,f.length-1),out=[];
+    for(let i=n;i<f.length;i++){const w=f.slice(i-n,i+1),km=w[n].odo-w[0].odo;if(km>0)out.push({date:f[i].date,v:sumCost(w.slice(1))/km});}
+    return out;
+  }
+  if(m==='month'){
+    const dates=live('fuelings',vid).map(x=>x.date).concat(live('repairs',vid).map(x=>x.date)).sort();
+    if(!dates.length)return [];
+    const n=Math.min(24,Math.max(2,(new Date().getFullYear()-+dates[0].slice(0,4))*12+new Date().getMonth()-(+dates[0].slice(5,7)-1)+1));
+    return rankMonths(vid,n).map(x=>({date:x.key+'-01',v:x.fuel+x.svc}));
+  }
+  return [];
+}
+// </calc>
+
+/* ---------- formátování ---------- */
+const nf=(n,d=0)=>(n==null||isNaN(n))?'–':Number(n).toLocaleString('cs-CZ',{minimumFractionDigits:d,maximumFractionDigits:d});
+const money=n=>nf(n,0)+' Kč';
+const fdate=s=>{const a=s.split('-');return +a[2]+'. '+ +a[1]+'. '+a[0];};
+const monthLabel=k=>{const a=k.split('-');return ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'][a[1]-1]+' '+a[0].slice(2);};
+const num=s=>{const t=String(s==null?'':s).replace(/\s/g,'').replace(',','.');if(t==='')return null;const n=Number(t);return isNaN(n)?NaN:n;};
+
+/* ---------- stav UI ---------- */
+let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
+function vid(){
+  const act=vehicleById(db.activeVehicle);
+  if(act)return act.id;
+  const f=db.vehicles.find(v=>!v.deleted);
+  db.activeVehicle=f?f.id:null;return db.activeVehicle;
+}
+
+/* ---------- sheet ---------- */
+function toast(m){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.style.cssText='position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:8px 14px;border-radius:10px;font-size:14px;z-index:99;pointer-events:none;transition:opacity .3s';document.body.appendChild(t);}t.textContent=m;t.style.opacity='1';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.opacity='0';},1600);}
+function closeSheet(){$('#sheet').className='';$('#sheet').innerHTML='';render();}
+function openSheet(title,body,o){
+  o=o||{};
+  $('#sheet').innerHTML='<div class="scrim" data-act="close"></div><form class="panel" id="sf" novalidate><div class="ph"><h2>'+esc(title)+'</h2><button type="button" class="x" data-act="close" aria-label="Zavřít">✕</button></div><div class="pb">'+body+'</div><p class="err" id="err" role="alert" style="padding:0 16px;margin:6px 0 0"></p><div class="pf">'+(o.onDelete?'<button type="button" class="btn danger" id="del">Smazat</button>':'')+'<button class="btn primary" type="submit">'+(o.saveLabel||'Uložit')+'</button></div></form>';
+  $('#sheet').className='open';
+  $('#sf').onsubmit=e=>{e.preventDefault();let r=null;try{r=o.onSave?o.onSave():null;}catch(ex){r='Uložení selhalo: '+(ex&&ex.message||ex)+'. Pošli prosím tuto hlášku.';}if(!r&&o.onSave)setTimeout(()=>toast('Uloženo ✓'),0);if(r){const er=$('#err');er.style.color='';er.textContent=r;try{er.scrollIntoView({block:'nearest'});}catch(x){}}else closeSheet();};
+  if(o.onDelete){const b=$('#del');b.onclick=()=>{if(!b.dataset.arm){b.dataset.arm='1';b.textContent='Opravdu smazat?';return;}o.onDelete();closeSheet();};}
+  if(o.after)o.after();
+}
+const val=id=>$('#'+id).value;
+
+/* ---------- formuláře ---------- */
+function requireDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s);}
+
+function fuelForm(id){
+  const v=vid(),ex=id?db.fuelings.find(x=>x.id===id):null,cur=currentOdo(v);
+  const body='<div class="two"><div><label for="f_date">Datum</label><input id="f_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="f_odo">Tachometr (km)</label><input id="f_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>'
+   +'<div class="two"><div><label for="f_l">Litry</label><input id="f_l" inputmode="decimal" value="'+(ex?ex.liters:'')+'"></div>'
+   +'<div><label for="f_ppl">Cena za litr (Kč)</label><input id="f_ppl" inputmode="decimal" value="'+(ex&&ex.liters?+(ex.total/ex.liters).toFixed(2):'')+'"></div></div>'
+   +'<label for="f_tot">Celkem (Kč)</label><input id="f_tot" inputmode="decimal" value="'+(ex?ex.total:'')+'">'
+   +'<label class="chk"><input id="f_full" type="checkbox" '+(ex&&ex.full?'checked':'')+'> Plná nádrž (volitelné, zpřesní spotřebu)</label>'
+   +'<label for="f_note">Poznámka</label><input id="f_note" value="'+esc(ex?ex.note:'')+'">';
+  openSheet(ex?'Upravit tankování':'Nové tankování',body,{
+    after(){
+      const L=$('#f_l'),P=$('#f_ppl'),T=$('#f_tot');
+      const upd=src=>{const l=num(L.value),p=num(P.value),t=num(T.value);
+        if(src==='t'){if(l>0&&t>=0)P.value=+(t/l).toFixed(2);}
+        else if(l>0&&p>=0&&P.value!==''){T.value=+(l*p).toFixed(2);}
+        else if(l>0&&t>=0&&T.value!==''&&src==='l'){P.value=+(t/l).toFixed(2);}};
+      L.oninput=()=>upd('l');P.oninput=()=>upd('p');T.oninput=()=>upd('t');
+    },
+    onSave(){
+      const date=val('f_date'),odo=num(val('f_odo')),l=num(val('f_l'));let t=num(val('f_tot'));const p=num(val('f_ppl'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if(!(odo>0))return 'Zadej stav tachometru.';
+      if(!(l>0))return 'Zadej počet litrů.';
+      if(t==null&&p!=null)t=+(l*p).toFixed(2);
+      if(t==null||isNaN(t)||t<0)return 'Zadej cenu (celkem nebo za litr).';
+      const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{date:date,odo:Math.round(odo),liters:l,total:t,full:$('#f_full').checked,note:val('f_note').trim()});
+      touch(rec);if(!ex)db.fuelings.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function odoForm(id){
+  const v=vid(),ex=id?db.odos.find(x=>x.id===id):null,cur=currentOdo(v);
+  openSheet(ex?'Upravit stav tachometru':'Zapsat tachometr',
+   '<div class="two"><div><label for="o_date">Datum</label><input id="o_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="o_odo">Tachometr (km)</label><input id="o_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>',{
+    onSave(){
+      const date=val('o_date'),odo=num(val('o_odo'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if(!(odo>0))return 'Zadej stav tachometru.';
+      const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{date:date,odo:Math.round(odo)});touch(rec);if(!ex)db.odos.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function repairForm(id){
+  const v=vid(),ex=id?db.repairs.find(x=>x.id===id):null,cur=currentOdo(v);
+  openSheet(ex?'Upravit servis':'Nový servis / oprava',
+   '<label for="r_title">Co se dělalo</label><input id="r_title" value="'+esc(ex?ex.title:'')+'" placeholder="např. výměna brzdových destiček">'
+   +'<div class="two"><div><label for="r_date">Datum</label><input id="r_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="r_odo">Tachometr (km)</label><input id="r_odo" inputmode="numeric" placeholder="'+(cur!=null?nf(cur):'')+'" value="'+(ex&&ex.odo!=null?ex.odo:'')+'"></div></div>'
+   +'<div class="two"><div><label for="r_parts">Díly (Kč)</label><input id="r_parts" inputmode="decimal" value="'+(ex&&ex.parts?ex.parts:'')+'"></div>'
+   +'<div><label for="r_labor">Práce (Kč)</label><input id="r_labor" inputmode="decimal" value="'+(ex&&ex.labor?ex.labor:'')+'"></div></div>'
+   +'<label for="r_shop">Dílna</label><input id="r_shop" value="'+esc(ex?ex.shop:'')+'">'
+   +'<label for="r_note">Poznámka</label><input id="r_note" value="'+esc(ex?ex.note:'')+'">',{
+    onSave(){
+      const title=val('r_title').trim(),date=val('r_date'),odo=num(val('r_odo')),parts=num(val('r_parts'))||0,labor=num(val('r_labor'))||0;
+      if(!title)return 'Zadej popis opravy.';
+      if(!requireDate(date))return 'Zadej datum.';
+      if(isNaN(odo)||(odo!=null&&odo<=0))return 'Neplatný stav tachometru.';
+      if(parts<0||labor<0)return 'Cena nemůže být záporná.';
+      if(odo!=null){const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;}
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{title:title,date:date,odo:odo!=null?Math.round(odo):null,parts:parts,labor:labor,shop:val('r_shop').trim(),note:val('r_note').trim()});
+      touch(rec);if(!ex)db.repairs.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+const CARD=[['Identifikace',[['make','Značka'],['model','Model'],['variant','Varianta'],['year','Rok výroby'],['vin','VIN'],['engine','Číslo motoru'],['engType','Typ motoru'],['power','Výkon (kW)'],['displ','Zdvihový objem (cm³)'],['fuel','Palivo'],['color','Barva'],['body','Karoserie']]],
+ ['Registrace a doklady',[['reg1','Datum 1. registrace','date'],['regCz','Datum 1. registrace v ČR','date'],['orv','Číslo ORV (malý TP)'],['ztp','Číslo ZTP / TP'],['stkTo','Pravidelná TK do (dle registru)','date'],['emis','Emisní úroveň']]],
+ ['Rozměry a hmotnosti',[['seats','Počet míst'],['dims','Délka × šířka × výška (mm)'],['wheelbase','Rozvor (mm)'],['track','Rozchod (mm)'],['weightOp','Provozní hmotnost (kg)'],['weightMax','Největší povolená hmotnost (kg)'],['axle','Povolená hmotnost na nápravu (kg)'],['trailerB','Přípojné vozidlo brzděné (kg)'],['trailerU','Přípojné vozidlo nebrzděné (kg)'],['train','Jízdní souprava (kg)'],['tow','Tažné zařízení'],['maxSpeed','Nejvyšší rychlost (km/h)']]],
+ ['Technické údaje',[['tank','Objem nádrže (l)'],['tpCons','Spotřeba dle TP (l/100 km)'],['tires','Pneumatiky (rozměr)'],['tiresAlt','Povolené alternativy'],['rims','Ráfky'],['oil','Motorový olej (typ)'],['oilVol','Objem oleje (l)'],['coolant','Chladicí kapalina'],['brake','Brzdová kapalina'],['battery','Autobaterie'],['wipers','Stěrače (rozměry)']]],
+ ['Pořízení a prodej',[['buyPrice','Pořizovací cena (Kč)'],['buyDate','Datum pořízení','date'],['buyOdo','Stav tachometru při koupi (km)'],['curValue','Odhad současné hodnoty (Kč)'],['sellPrice','Prodejní cena (Kč)'],['sellDate','Datum prodeje','date']]],
+ ['Pojištění',[['insurer','Pojišťovna'],['policy','Číslo smlouvy'],['insPov','Povinné ručení platné do','date'],['insHav','Havarijní pojištění platné do','date']]],
+ ['Poznámky',[['note','Poznámka']]]];
+const INS=[['insPov','Povinné ručení'],['insHav','Havarijní pojištění']];
+function insInfo(c){return INS.filter(i=>c&&c[i[0]]).map(i=>{const d=Math.round((pd(c[i[0]])-pd(todayIso()))/DAY);return {key:i[0],name:i[1],date:c[i[0]],days:d,status:d<0?'late':(d<=cfg().days?'soon':'ok')};});}
+function cardForm(){
+  const v=vid(),car=vehicleById(v),c=car.card||{};
+  let body='<label for="k_name">Název auta</label><input id="k_name" value="'+esc(car.name)+'"><label for="k_plate">SPZ</label><input id="k_plate" value="'+esc(car.plate||'')+'">';
+  CARD.forEach(g=>{body+='<h2 style="margin:16px 0 0">'+g[0]+'</h2>';g[1].forEach(f=>{body+='<label for="k_'+f[0]+'">'+f[1]+'</label><input id="k_'+f[0]+'"'+(f[2]==='date'?' type="date"':'')+' value="'+esc(c[f[0]]||'')+'">';});});
+  openSheet('Karta vozidla',body,{
+    onSave(){
+      const name=val('k_name').trim();if(!name)return 'Zadej název auta.';
+      const card={};CARD.forEach(g=>g[1].forEach(f=>{const x=val('k_'+f[0]).trim();if(x)card[f[0]]=x;}));
+      Object.assign(car,{name:name,plate:val('k_plate').trim(),card:card});touch(car);persist();
+    }
+  });
+}
+function tireForm(id){
+  const v=vid(),ex=id?db.tires.find(x=>x.id===id):null,lt=ex?lastTread(ex):null;
+  const inp=(i,l,val_,ph,mode)=>'<div><label for="'+i+'">'+l+'</label><input id="'+i+'"'+(mode?' inputmode="'+mode+'"':'')+(ph?' placeholder="'+ph+'"':'')+' value="'+esc(val_==null?'':val_)+'"></div>';
+  openSheet(ex?'Upravit sadu pneumatik':'Nová sada pneumatik',
+   '<label for="w_season">Typ</label><select class="f" id="w_season">'+['letní','zimní','celoroční'].map(x=>'<option'+(ex&&ex.season===x?' selected':'')+'>'+x+'</option>').join('')+'</select>'
+   +'<div class="two">'+inp('w_brand','Značka',ex&&ex.brand)+inp('w_model','Model',ex&&ex.model)+'</div>'
+   +'<div class="two">'+inp('w_size','Rozměr',ex&&ex.size,'235/65 R17')+inp('w_dot','DOT (týden+rok)',ex&&ex.dot,'3523','numeric')+'</div>'
+   +'<div class="two">'+inp('w_tread','Dezén (mm)',lt&&lt.mm,'','decimal')+inp('w_kmb','Najeto před evidencí (km)',ex&&ex.kmBefore,'','numeric')+'</div>'
+   +inp('w_rims','Ráfky',ex&&ex.rims)+inp('w_store','Uložení',ex&&ex.storage,'např. sklep, pneuservis')+inp('w_note','Poznámka',ex&&ex.note),{
+    onSave(){
+      const brand=val('w_brand').trim(),model=val('w_model').trim(),size=val('w_size').trim(),dot=val('w_dot').replace(/\D/g,''),tread=num(val('w_tread')),kmb=num(val('w_kmb'));
+      if(!brand&&!model&&!size)return 'Zadej aspoň značku, model nebo rozměr.';
+      if(dot&&!/^\d{4}$/.test(dot))return 'DOT zadej jako 4 číslice: týden a rok, např. 3523.';
+      if(isNaN(tread)||(tread!=null&&(tread<0||tread>12)))return 'Dezén zadej v mm (0 až 12).';
+      if(isNaN(kmb)||(kmb!=null&&kmb<0))return 'Neplatný nájezd.';
+      const rec=ex||{id:uid(),vehicleId:v,treads:[]};
+      Object.assign(rec,{season:val('w_season'),brand:brand,model:model,size:size,dot:dot,rims:val('w_rims').trim(),storage:val('w_store').trim(),note:val('w_note').trim(),kmBefore:kmb!=null?Math.round(kmb):0});
+      rec.treads=rec.treads||[];
+      const last=lastTread(rec);
+      if(tread!=null&&(!last||last.mm!==tread))rec.treads.push({date:todayIso(),mm:tread});
+      touch(rec);if(!ex)db.tires.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function mountForm(tireId,evId,type){
+  const v=vid(),t=db.tires.find(x=>x.id===tireId),ex=evId?db.tireEvents.find(x=>x.id===evId):null,cur=currentOdo(v);
+  if(ex)type=ex.type||'on';const off=type==='off';
+  openSheet(ex?(off?'Upravit sundání':'Upravit nasazení'):(off?'Sundat: ':'Nasadit: ')+(ex?'':tireName(t)),
+   '<div class="two"><div><label for="m_date">Datum</label><input id="m_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="m_odo">Tachometr (km)</label><input id="m_odo" inputmode="numeric" value="'+(ex?ex.odo:(cur!=null?cur:''))+'"></div></div>'+(off?'':'<p class="sub" style="margin:8px 0 0">Jiná nasazená sada se sundá ve stejný okamžik.</p>'),{
+    saveLabel:ex?'Uložit':(off?'Sundat':'Nasadit'),
+    onSave(){
+      const date=val('m_date'),odo=num(val('m_odo'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if(!(odo>0))return 'Zadej stav tachometru.';
+      const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
+      const rec=ex||{id:uid(),vehicleId:v,tireId:tireId,type:off?'off':'on'};
+      Object.assign(rec,{date:date,odo:Math.round(odo)});touch(rec);if(!ex)db.tireEvents.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function treadForm(tireId){
+  const t=db.tires.find(x=>x.id===tireId);
+  openSheet('Změřit dezén: '+tireName(t),
+   '<div class="two"><div><label for="d2_date">Datum</label><input id="d2_date" type="date" value="'+todayIso()+'"></div><div><label for="d2_mm">Dezén (mm)</label><input id="d2_mm" inputmode="decimal"></div></div>',{
+    onSave(){const date=val('d2_date'),mm=num(val('d2_mm'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if(!(mm>=0&&mm<=12))return 'Dezén zadej v mm (0 až 12).';
+      (t.treads=t.treads||[]).push({date:date,mm:mm});touch(t);persist();}
+  });
+}
+const tireName=t=>t?[t.brand,t.model,t.size].filter(Boolean).join(' ')||'sada':'';
+const PRESETS=[['Výměna oleje',15000,12],['STK',null,24],['Přezutí pneumatik',null,6],['Pojištění',null,12],['Dálniční známka',null,12],['Brzdová kapalina',null,24],['Rozvody',120000,null]];
+function taskForm(id){
+  const v=vid(),ex=id?db.tasks.find(x=>x.id===id):null,cur=currentOdo(v),one=ex?isOneTime(ex):false;
+  openSheet(ex?'Upravit úkon':'Nový úkon',
+   '<label for="t_name">Název</label><input id="t_name" value="'+esc(ex?ex.name:'')+'">'
+   +(ex?'':'<div class="chips">'+PRESETS.map((p,i)=>'<button type="button" data-preset="'+i+'">'+p[0]+'</button>').join('')+'</div>')
+   +'<label for="t_prio">Priorita</label><select class="f" id="t_prio">'+['high','normal','low'].map(k=>'<option value="'+k+'"'+(prioOf(ex)===k?' selected':'')+'>'+PRIO[k][0]+(k==='high'?' (bezpečnost, drahé následky)':(k==='low'?' (drobnosti)':''))+'</option>').join('')+'</select>'
+   +'<label for="t_type">Typ</label><select class="f" id="t_type"><option value="rep"'+(one?'':' selected')+'>Opakovaný (každých X km / měsíců)</option><option value="one"'+(one?' selected':'')+'>Jednorázový (na zadaném stavu / datu)</option></select>'
+   +'<div id="g_rep"><div class="two"><div><label for="t_km">Interval (km)</label><input id="t_km" inputmode="numeric" value="'+(ex&&ex.intervalKm?ex.intervalKm:'')+'"></div>'
+   +'<div><label for="t_mo">Interval (měsíce)</label><input id="t_mo" inputmode="numeric" value="'+(ex&&ex.intervalMonths?ex.intervalMonths:'')+'"></div></div>'
+   +'<div class="two"><div><label for="t_date">Naposledy (datum)</label><input id="t_date" type="date" value="'+(ex&&ex.lastDate?ex.lastDate:'')+'"></div>'
+   +'<div><label for="t_odo">Naposledy (km)</label><input id="t_odo" inputmode="numeric" placeholder="'+(cur!=null?nf(cur):'')+'" value="'+(ex&&ex.lastOdo!=null?ex.lastOdo:'')+'"></div></div></div>'
+   +'<div id="g_one"><div class="two"><div><label for="t_dkm">Na stavu (km)</label><input id="t_dkm" inputmode="numeric" placeholder="'+(cur!=null?'nyní '+nf(cur):'')+'" value="'+(ex&&ex.dueKm!=null?ex.dueKm:'')+'"></div>'
+   +'<div><label for="t_ddate">Do data</label><input id="t_ddate" type="date" value="'+(ex&&ex.dueDate?ex.dueDate:'')+'"></div></div></div>',{
+    after(){
+      const sync=()=>{const o=$('#t_type').value==='one';$('#g_rep').style.display=o?'none':'';$('#g_one').style.display=o?'':'none';};
+      $('#t_type').onchange=sync;sync();
+      document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const p=PRESETS[b.dataset.preset];$('#t_name').value=p[0];$('#t_km').value=p[1]||'';$('#t_mo').value=p[2]||'';$('#t_type').value='rep';sync();});
+    },
+    onSave(){
+      const name=val('t_name').trim(),one=val('t_type')==='one';
+      if(!name)return 'Zadej název.';
+      const rec=ex||{id:uid(),vehicleId:v,history:[]};rec.priority=val('t_prio');
+      if(one){
+        const dk=num(val('t_dkm')),dd=val('t_ddate');
+        if(!(dk>0)&&!requireDate(dd))return 'Zadej stav km nebo datum, kdy se má úkon udělat.';
+        Object.assign(rec,{name:name,intervalKm:null,intervalMonths:null,lastDate:null,lastOdo:null,dueKm:dk>0?Math.round(dk):null,dueDate:requireDate(dd)?dd:null});
+      }else{
+        const km=num(val('t_km')),mo=num(val('t_mo')),d=val('t_date'),o=num(val('t_odo'));
+        if(!(km>0)&&!(mo>0))return 'Zadej interval v km nebo v měsících.';
+        if(km>0&&o==null)return 'Pro interval v km zadej, při kolika km se úkon dělal naposledy.';
+        if(mo>0&&!requireDate(d))return 'Pro interval v měsících zadej datum posledního provedení.';
+        Object.assign(rec,{name:name,intervalKm:km>0?Math.round(km):null,intervalMonths:mo>0?Math.round(mo):null,lastDate:requireDate(d)?d:null,lastOdo:o!=null&&!isNaN(o)?Math.round(o):null,dueKm:null,dueDate:null});
+      }
+      touch(rec);if(!ex)db.tasks.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+const FIXED_PRESETS=['Pojištění povinné','Pojištění havarijní','Dálniční známka','Jiné'];
+function fixedForm(id){
+  const v=vid(),ex=id?db.fixed.find(x=>x.id===id):null;
+  openSheet(ex?'Upravit fixní náklad':'Nový roční fixní náklad',
+   '<label for="x_name">Název</label><input id="x_name" value="'+esc(ex?ex.name:'')+'">'
+   +(ex?'':'<div class="chips">'+FIXED_PRESETS.map((p,i)=>'<button type="button" data-fp="'+i+'">'+p+'</button>').join('')+'</div>')
+   +'<div class="two"><div><label for="x_year">Rok</label><input id="x_year" inputmode="numeric" value="'+(ex?ex.year:new Date().getFullYear())+'"></div>'
+   +'<div><label for="x_amt">Částka za rok (Kč)</label><input id="x_amt" inputmode="decimal" value="'+(ex?ex.amount:'')+'"></div></div>'
+   +'<p class="sub">Do ceny na km se započítá poměrná část podle délky sledovaného období.</p>',{
+    after(){document.querySelectorAll('[data-fp]').forEach(b=>b.onclick=()=>{$('#x_name').value=FIXED_PRESETS[b.dataset.fp];});},
+    onSave(){
+      const name=val('x_name').trim(),year=num(val('x_year')),amt=num(val('x_amt'));
+      if(!name)return 'Zadej název.';
+      if(!(year>=1990&&year<=2100))return 'Zadej platný rok.';
+      if(!(amt>=0))return 'Zadej částku.';
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{name:name,year:Math.round(year),amount:amt});touch(rec);if(!ex)db.fixed.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function tripForm(){
+  const v=vid(),segs=fuelSegments(v),exact=segs.length>=3;
+  const l100=exact?consStats(segs).avg:approxCons(v,0);
+  const f5=sortedFuels(v).slice(-5),price=f5.length?sumCost(f5)/f5.reduce((s,x)=>s+x.liters,0):null;
+  const ps=periodStats(v,''),tc=tco(v),amort=tc&&tc.buy!=null&&tc.km>0?tc.deprec/tc.km:null;
+  openSheet('Cena cesty',
+   '<div class="two"><div><label for="c_km">Vzdálenost (km)</label><input id="c_km" inputmode="decimal" placeholder="např. 280"></div>'
+   +'<div><label for="c_n">Počet cest</label><input id="c_n" inputmode="numeric" value="1"></div></div>'
+   +'<label class="chk"><input id="c_ret" type="checkbox"> Zpáteční cesta</label>'
+   +'<div class="two"><div><label for="c_l">Spotřeba (l/100 km)</label><input id="c_l" inputmode="decimal" value="'+(l100!=null?+l100.toFixed(1):'')+'"></div>'
+   +'<div><label for="c_p">Cena litru (Kč)</label><input id="c_p" inputmode="decimal" value="'+(price!=null?+price.toFixed(2):'')+'"></div></div>'
+   +'<div class="two"><div><label for="c_am">Amortizace (Kč/km)</label><input id="c_am" inputmode="decimal" value="'+(amort!=null?+amort.toFixed(2):'')+'"></div>'
+   +'<div><label for="c_fee">Poplatky celkem (Kč)</label><input id="c_fee" inputmode="decimal" placeholder="mýto, dálnice, trajekt"></div></div>'
+   +'<div class="two"><div><label for="c_park">Parkování celkem (Kč)</label><input id="c_park" inputmode="decimal"></div>'
+   +'<div><label for="c_pers">Počet osob</label><input id="c_pers" inputmode="numeric" value="1"></div></div>'
+   +'<div class="res" id="c_res"></div>'
+   +'<p class="sub">Spotřeba a cena litru jsou předvyplněné z historie auta (cena z posledních 5 tankování). Amortizace je ztráta hodnoty na km z TCO (potřebuje pořizovací cenu a odhad hodnoty na kartě vozidla), můžeš ji přepsat. Poplatky a parkování zadej za všechny cesty dohromady.</p>',{
+    saveLabel:'Zavřít',
+    after(){
+      const calc=()=>{
+        const km=num(val('c_km'))||0,n=Math.max(1,num(val('c_n'))||1),dist=km*(n)*($('#c_ret').checked?2:1),l=num(val('c_l')),p=num(val('c_p')),pers=Math.max(1,num(val('c_pers'))||1);
+        const R=(a,b)=>'<div class="line"><span>'+a+'</span><b>'+b+'</b></div>';
+        let h='';
+        if(!(dist>0)){$('#c_res').innerHTML='';return;}
+        h+=R('Celková vzdálenost',nf(dist,0)+' km');
+        const am=num(val('c_am'))||0,fee=num(val('c_fee'))||0,park=num(val('c_park'))||0;
+        if(l>0&&p>0){const lit=dist*l/100,fuel=lit*p,amT=dist*am,tot=fuel+amT+fee+park;
+          h+=R('Palivo ('+nf(lit,1)+' l)',money(fuel))+(am>0?R('Amortizace ('+nf(am,2)+' Kč/km)',money(amT)):'')+(fee>0?R('Poplatky',money(fee)):'')+(park>0?R('Parkování',money(park)):'');
+          h+='<div class="big">'+money(tot)+'</div><div class="sub">celkem za cestu'+(dist>0?' · '+nf(tot/dist,2)+' Kč/km':'')+'</div>';
+          if(pers>1)h+='<div class="big" style="font-size:22px">'+money(tot/pers)+'</div><div class="sub">na osobu při '+pers+' lidech (palivo na osobu '+money(fuel/pers)+')</div>';}
+        else h+='<div class="sub">Doplň spotřebu a cenu litru.</div>';
+        if(ps.fuelPerKm!=null){
+          const ex=am*dist+fee+park;
+          h+='<h2 style="margin:12px 0 2px">Podle historie auta</h2>'+R('Palivo ('+nf(ps.fuelPerKm,2)+' Kč/km)',money(dist*ps.fuelPerKm))+R('Vč. servisu ('+nf(ps.totalPerKm,2)+' Kč/km)',money(dist*ps.totalPerKm));
+          if(live('fixed',v).length&&ps.allPerKm!=null)h+=R('Vč. fixních ('+nf(ps.allPerKm,2)+' Kč/km)',money(dist*ps.allPerKm));
+          const base=(live('fixed',v).length&&ps.allPerKm!=null?ps.allPerKm:ps.totalPerKm)*dist;
+          if(ex>0){h+=R('Vč. amortizace, poplatků a parkování',money(base+ex));if(pers>1)h+=R('Na osobu',money((base+ex)/pers));}
+          else if(pers>1)h+=R('Na osobu (bez poplatků)',money(base/pers));
+        }
+        $('#c_res').innerHTML=h;
+      };
+      document.querySelectorAll('#sf input').forEach(i=>{i.oninput=calc;i.onchange=calc;});calc();
+    }
+  });
+}
+function doneForm(id){
+  const t=db.tasks.find(x=>x.id===id),cur=currentOdo(t.vehicleId);
+  openSheet('Provedeno: '+t.name,
+   '<div class="two"><div><label for="d_date">Datum</label><input id="d_date" type="date" value="'+todayIso()+'"></div>'
+   +'<div><label for="d_odo">Tachometr (km)</label><input id="d_odo" inputmode="numeric" value="'+(cur!=null?cur:'')+'"></div></div>'
+   +'<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:15px;color:var(--ink)"><input type="checkbox" id="d_rep" checked> Zapsat do Servisu (s cenou)</label>'
+   +'<div id="d_repbox"><div class="two"><div><label for="d_parts">Díly (Kč)</label><input id="d_parts" inputmode="decimal"></div>'
+   +'<div><label for="d_labor">Práce (Kč)</label><input id="d_labor" inputmode="decimal"></div></div>'
+   +'<label for="d_shop">Dílna</label><input id="d_shop"></div>'
+   +live('parts',t.vehicleId).filter(x=>!x.removedDate&&x.taskId===t.id).map(x=>'<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:15px;color:var(--ink)"><input type="checkbox" data-lp="'+x.id+'" checked> Zaznamenat výměnu dílu: '+esc(x.name)+'</label>').join(''),{
+    saveLabel:'Označit jako provedené',
+    after(){const sy=()=>{$('#d_repbox').style.display=$('#d_rep').checked?'':'none';};$('#d_rep').onchange=sy;sy();},
+    onSave(){
+      const date=val('d_date'),odo=num(val('d_odo'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if((t.intervalKm||(isOneTime(t)&&t.dueKm!=null))&&!(odo>0))return 'Zadej stav tachometru.';
+      const wr=$('#d_rep').checked,parts=num(val('d_parts'))||0,labor=num(val('d_labor'))||0;
+      if(wr){
+        if(parts<0||labor<0)return 'Cena nemůže být záporná.';
+        if(odo>0){const e=checkOdo(t.vehicleId,date,odo,null);if(e)return e;}
+        const rec={id:uid(),vehicleId:t.vehicleId,title:t.name,date:date,odo:odo>0?Math.round(odo):null,parts:parts,labor:labor,shop:val('d_shop').trim(),note:'Z úkonu',taskId:t.id};
+        touch(rec);db.repairs.push(rec);
+      }
+      Array.prototype.forEach.call(document.querySelectorAll('[data-lp]'),cb=>{if(!cb.checked)return;const x=db.parts.find(p=>p.id===cb.dataset.lp);if(x&&date>=x.date)replacePart(x,date,odo>0?Math.round(odo):null,x.spec||'',null,false,0,'',true);});
+      if(isOneTime(t)){t.done=true;t.doneDate=date;t.doneOdo=odo>0?Math.round(odo):null;touch(t);persist();return;}
+      (t.history=t.history||[]).push({date:t.lastDate,odo:t.lastOdo});
+      t.lastDate=date;t.lastOdo=odo>0?Math.round(odo):t.lastOdo;touch(t);persist();
+    }
+  });
+}
+function vehicleForm(id){
+  const ex=id?db.vehicles.find(x=>x.id===id):null;
+  openSheet(ex?'Upravit auto':'Nové auto',
+   '<label for="c_name">Název</label><input id="c_name" value="'+esc(ex?ex.name:'')+'" placeholder="např. Octavia">'
+   +'<label for="c_plate">SPZ (volitelné)</label><input id="c_plate" value="'+esc(ex?ex.plate:'')+'">'
+   +'<label for="c_odo">Počáteční stav tachometru (km, volitelné)</label><input id="c_odo" inputmode="numeric" value="'+(ex&&ex.startOdo!=null?ex.startOdo:'')+'">',{
+    onSave(){
+      const name=val('c_name').trim(),odo=num(val('c_odo'));
+      if(!name)return 'Zadej název auta.';
+      if(isNaN(odo)||(odo!=null&&odo<0))return 'Neplatný stav tachometru.';
+      const rec=ex||{id:uid(),startDate:todayIso()};
+      Object.assign(rec,{name:name,plate:val('c_plate').trim(),startOdo:odo!=null?Math.round(odo):null});
+      touch(rec);if(!ex){db.vehicles.push(rec);db.activeVehicle=rec.id;}persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function mergeDb(inc){
+  if(!inc||typeof inc!=='object')throw new Error('Neplatný soubor.');
+  inc=JSON.parse(JSON.stringify(inc));
+  let n=0;
+  ['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'].forEach(k=>{
+    db[k]=db[k]||[];
+    if(inc[k]!==undefined&&!Array.isArray(inc[k]))throw new Error('Neplatná data ('+k+').');
+    const m=new Map(db[k].map(x=>[x.id,x]));
+    (inc[k]||[]).forEach(x=>{if(!x||!x.id)return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0)){m.set(x.id,x);n++;}});
+    db[k]=Array.from(m.values());
+  });
+  if(adoptSettings(inc.settings))n++;
+  persistLocal();return n;
+}
+function settingsSheet(){
+  const vs=db.vehicles.filter(v=>!v.deleted);
+  openSheet('Nastavení','<h2 style="margin-top:6px">Auta</h2><div class="list">'
+   +vs.map(v=>'<button type="button" class="row" data-act="edit-veh" data-id="'+v.id+'"><div class="r1"><b>'+esc(v.name)+'</b><span>'+esc(v.plate||'')+'</span></div></button>').join('')
+   +'</div><div class="actions"><button type="button" class="btn" data-act="new-veh">+ Přidat auto</button></div>'
+   +'<h2>Záloha do cloudu</h2>'+cloudPanel()+'<p class="sub" id="syncinfo">'+infoText(syncSt)+'</p>'+fileSection()+''
+   +'<h2>Upozornění v úkonech</h2><p class="sub" style="margin:0">Úkon je „Brzy", když do termínu zbývá méně než zadaný počet dní, nebo méně než zadané km. Po termínu je od překročení. Platí i pro pojištění.</p>'
+   +'<div class="two"><div><label for="s_days">Brzy: dní předem</label><input id="s_days" inputmode="numeric" value="'+cfg().days+'"></div><div><label for="s_pct">Brzy: % intervalu v km</label><input id="s_pct" inputmode="numeric" value="'+cfg().kmPct+'"></div></div>'
+   +'<label for="s_dayone">Brzy u jednorázových úkonů: dní předem</label><input id="s_dayone" inputmode="numeric" value="'+cfg().daysOne+'">'
+   +'<label for="s_one">Brzy u jednorázových úkonů na km: zbývá méně než (km)</label><input id="s_one" inputmode="numeric" value="'+cfg().kmOne+'">'
+   +'<h2>Záloha dat</h2><div class="actions"><button type="button" class="btn" data-act="export">Export JSON</button><button type="button" class="btn" data-act="import">Import JSON</button></div>'
+   +'<p class="sub">Data jsou uložena v tomto zařízení (prohlížeči). Pro jistotu je občas exportuj.</p>',{saveLabel:'Uložit',
+    onSave(){
+      const d=num(val('s_days')),d1=num(val('s_dayone')),pc=num(val('s_pct')),k=num(val('s_one'));
+      if(!(d>=0&&d<=3650))return 'Počet dní zadej v rozmezí 0 až 3650.';
+      if(!(d1>=0&&d1<=3650))return 'Počet dní u jednorázových úkonů zadej v rozmezí 0 až 3650.';
+      if(!(pc>=0&&pc<=100))return 'Procenta zadej v rozmezí 0 až 100.';
+      if(!(k>=0))return 'Kilometry zadej jako nezáporné číslo.';
+      saveSettings({days:Math.round(d),daysOne:Math.round(d1),kmPct:pc,kmOne:Math.round(k)});
+    }});
+}
+function exportSheet(){
+  const json=JSON.stringify(db,null,1);
+  openSheet('Export dat','<textarea id="x_json" readonly></textarea><div class="actions"><button type="button" class="btn" id="x_dl">Uložit do souboru</button><button type="button" class="btn" id="x_cp">Zkopírovat</button></div>',{
+    saveLabel:'Zavřít',
+    after(){
+      $('#x_json').value=json;
+      $('#x_dl').onclick=async()=>{const fn='badcars-zaloha-'+todayIso()+'.json',er=$('#err');
+        try{const dl=window.claude&&window.claude.use?await window.claude.use('downloads'):null;
+          if(dl){try{await dl.save({filename:fn,data:json});er.style.color='var(--ok)';er.textContent='Uloženo jako '+fn+'.';}
+            catch(x){er.style.color='';er.textContent=x&&x.code==='declined'?'Uložení zrušeno.':(x&&x.code==='rate_limited'?'Chvíli počkej a zkus to znovu.':'Uložení se nepovedlo, použij Zkopírovat.');}
+            return;}}catch(x){}
+        try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));a.download='badcars-'+todayIso()+'.json';document.body.appendChild(a);a.click();a.remove();}catch(e){$('#err').textContent='Stažení se nepovedlo, použij Zkopírovat.';}};
+      $('#x_cp').onclick=()=>{const t=$('#x_json');t.select();try{navigator.clipboard.writeText(json).then(()=>$('#err').textContent='',()=>document.execCommand('copy'));}catch(e){try{document.execCommand('copy');}catch(_){}}};
+    }
+  });
+}
+function importSheet(){
+  openSheet('Import dat','<p class="sub">Vlož JSON nebo vyber soubor. Data se sloučí s existujícími (novější záznam vyhrává).</p><input id="i_file" type="file"><label for="i_json">Nebo vlož text</label><textarea id="i_json"></textarea>',{
+    saveLabel:'Sloučit',
+    after(){$('#i_file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#i_json').value=r.result;$('#err').style.color='var(--ok)';$('#err').textContent='Soubor načten ('+f.name+'). Klepni na Sloučit.';};r.onerror=()=>{$('#err').textContent='Soubor se nepodařilo přečíst, vlož jeho text do pole níže.';};r.readAsText(f);};},
+    onSave(){try{const t=val('i_json').trim();if(!t)return 'Nic k importu.';const n=mergeDb(JSON.parse(t));if(!n)return 'Žádný nový záznam k přidání.';persist();}catch(e){return 'Import selhal: '+e.message;}}
+  });
+}
+
+/* ---------- zobrazení ---------- */
+function tile(k,v,sub){return '<div class="card"><div class="k">'+k+'</div><div class="v">'+v+'</div>'+(sub?'<div class="sub">'+sub+'</div>':'')+'</div>';}
+function taskRow(t,cur,daily){
+  const i=taskInfo(t,cur,daily),lbl={late:'Po termínu',soon:'Brzy',ok:'V pořádku'}[i.status],sym={late:'⚠ ',soon:'● ',ok:'✓ '}[i.status];
+  const parts=[];
+  if(i.km!=null)parts.push(i.km<0?'o '+nf(-i.km)+' km přes':'za '+nf(i.km)+' km');
+  if(i.days!=null)parts.push(i.days<0?fdate(i.nextDate)+' (před '+nf(-i.days)+' dny)':fdate(i.nextDate)+' (za '+nf(i.days)+' dní)');
+  if(i.km!=null&&i.estDays!=null&&i.km>0)parts.push('odhad ~'+fdate(isoD(new Date(Date.now()+i.estDays*DAY))));
+  if(isOneTime(t))parts.unshift('jednorázově');
+  return {info:i,t:t,html:'<button class="row" data-act="edit-task" data-id="'+t.id+'"><div class="r1"><b>'+esc(t.name)+(prioOf(t)!=='normal'?'<span class="pri '+prioOf(t)+'">'+(prioOf(t)==='high'?'▲ ':'▽ ')+PRIO[prioOf(t)][0]+'</span>':'')+'</b><span class="chip '+i.status+'">'+sym+lbl+'</span></div><div class="r2">'+(parts.join(' · ')||'—')+'</div></button>'};
+}
+function noVehicle(){
+  return '<div class="empty">Zatím tu není žádné auto.<br><br><button class="btn primary" data-act="new-veh">Přidat první auto</button></div>';
+}
+const TILE_DEFS=[
+ ['health','Zdraví auta',(v,D)=>{const H=healthScore(v);return '<div class="card" data-act="health" style="cursor:pointer"><div class="k">Zdraví auta</div><div class="v">'+(H.score!=null?H.score+' <small>/ 100</small>':'–')+'</div><div class="sub"><span class="chip '+H.state+'">'+(H.label||'málo dat')+'</span> detail</div></div>';}],
+ ['odo','Tachometr',(v,D)=>tile('Tachometr',D.cur!=null?nf(D.cur)+' <small>km</small>':'–')],
+ ['cons','Spotřeba (l/100 km)',(v,D,Y)=>Y?tile('Spotřeba letos',D.ps.l100!=null?nf(D.ps.l100,1)+' <small>l/100 km</small>':'–','letos · odhad z litrů a km'):tile('Spotřeba (celkově)',D.aAll!=null?nf(D.aAll,1)+' <small>l/100 km</small>':'–',D.aAll!=null?(D.exact?'plná–plná':'odhad z litrů a km'):'potřeba 2 tankování'),1],
+ ['kml','Km na litr',(v,D,Y)=>Y?tile('Km na litr letos',D.ps.l100?nf(100/D.ps.l100,2)+' <small>km/l</small>':'–','letos'):tile('Km na litr',D.aAll!=null?nf(100/D.aAll,2)+' <small>km/l</small>':'–','celkově'),1],
+ ['fuelkm','Palivo na km',(v,D,Y)=>Y?tile('Palivo na km letos',D.ps.fuelPerKm!=null?nf(D.ps.fuelPerKm,2)+' <small>Kč/km</small>':'–','letos · jen tankování'):tile('Palivo na km',D.cost?nf(D.cost.fuelPerKm,2)+' <small>Kč/km</small>':'–','jen tankování'),1],
+ ['totalkm','Celkem na km (palivo + servis)',(v,D,Y)=>Y?tile('Celkem na km letos',D.ps.totalPerKm!=null?nf(D.ps.totalPerKm,2)+' <small>Kč/km</small>':'–','letos · palivo + servis'):tile('Celkem na km',D.cost?nf(D.cost.totalPerKm,2)+' <small>Kč/km</small>':'–',D.cost?'palivo + servis':'potřeba 2 tankování'),1],
+ ['allkm','Vč. fixních nákladů na km',(v,D,Y)=>{const a=Y?D.ps:D.all;return tile('Vč. fixních nákladů'+(Y?' letos':''),a.allPerKm!=null?nf(a.allPerKm,2)+' <small>Kč/km</small>':'–',(Y?'letos · ':'')+'+ pojištění, známka');},1],
+ ['avgprice','Průměrná cena paliva',(v,D,Y)=>Y?tile('Cena paliva letos',D.ps.liters>0?nf(D.ps.spent/D.ps.liters,2)+' <small>Kč/l</small>':'–','letos'):tile('Průměrná cena paliva',D.L>0?nf(D.C/D.L,2)+' <small>Kč/l</small>':'–'),1],
+ ['daily','Nájezd',(v,D)=>tile('Nájezd',D.daily?nf(D.daily,0)+' <small>km/den</small>':'–',D.daily?'≈ '+nf(D.daily*30.44,0)+' km/měsíc':'potřeba záznamy za 7+ dní')],
+ ['kmyear','Nájezd letos',(v,D)=>{
+   const pts=odoPoints(v).slice().sort((x,y)=>x.date.localeCompare(y.date)||x.odo-y.odo),y0=D.year+'-01-01';
+   const before=pts.filter(x=>x.date<y0).pop(),inY=pts.filter(x=>x.date>=y0);
+   if(!inY.length)return tile('Nájezd letos','–','letos zatím bez záznamu');
+   const start=before?before.odo:inY[0].odo,km=inY[inY.length-1].odo-start;
+   const days=Math.round((pd(todayIso())-pd(y0))/DAY)+1;
+   return tile('Nájezd letos',nf(km)+' <small>km</small>',days>=30?'tempo ≈ '+nf(km/days*365,0)+' km/rok':'od 1. 1.');}],
+ ['bizkm','Služební km letos',(v,D)=>{const y=D.year,l=live('trips',v).filter(x=>x.date.startsWith(y));return tile('Služební km letos',nf(l.reduce((s,x)=>s+tripKm(x),0))+' <small>km</small>','náhrady '+money(l.reduce((s,x)=>s+tripPay(x),0)));}],
+ ['lastfuel','Poslední tankování',(v,D)=>{const f=sortedFuels(v).sort((a,b)=>a.date.localeCompare(b.date)).pop();return tile('Poslední tankování',f?fdate(f.date):'–',f?nf(f.liters,1)+' l · '+money(f.total):'');}],
+ ['fueltotal','Palivo celkem',(v,D,Y)=>Y?tile('Palivo letos',money(D.ps.spent),nf(D.ps.liters,0)+' l · '+D.ps.n+' tankování'):tile('Palivo celkem',money(D.C),nf(D.L,0)+' l'),1],
+ ['reptotal','Servis celkem',(v,D,Y)=>{const rs=live('repairs',v).filter(r=>!Y||r.date.startsWith(D.year));return tile(Y?'Servis letos':'Servis celkem',money(rs.reduce((s,r)=>s+repCost(r),0)),rs.length+' zápisů');},1],
+ ['tco','TCO celkem',(v,D)=>tile('TCO celkem',D.t?money(D.t.total):'–',D.t?(D.t.buy!=null?'vč. ztráty hodnoty':'bez pořizovací ceny'):'')],
+ ['tcokm','TCO na km',(v,D)=>tile('TCO na km',D.t&&D.t.perKm!=null?nf(D.t.perKm,2)+' <small>Kč/km</small>':'–',D.t&&D.t.buy!=null?'vč. ztráty hodnoty':'bez pořizovací ceny')],
+ ['tcoyear','TCO za rok',(v,D)=>tile('TCO za rok',D.t&&D.t.perYear!=null?money(D.t.perYear):'–')],
+ ['opmonth','Provozní náklady měsíčně',(v,D,Y)=>{if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,tot=D.ps.spent+D.ps.rep+fixedShare(v,D.year+'-01-01',todayIso());return tile('Náklady měsíčně letos',days>=15?money(tot/days*30.44):'–','letos · palivo + servis + fixní');}return tile('Náklady měsíčně',D.t&&D.t.opPerMonth!=null?money(D.t.opPerMonth):'–','palivo + servis + fixní');},1]];
+const tilePer=id=>((db.settings||{}).tilePeriod||{})[id]==='year';
+function tireState(t){
+  const age=dotAge(t.dot),lt=lastTread(t),lim=t.season!=='letní'?[4,5]:[1.6,3];
+  const a=age==null?null:(age>=10?'late':(age>=6?'soon':'ok')),r=lt?(lt.mm<lim[0]?'late':(lt.mm<lim[1]?'soon':'ok')):null;
+  const w={late:2,soon:1,ok:0};if(a==null&&r==null)return null;return [a,r].filter(Boolean).sort((x,y)=>w[y]-w[x])[0];
+}
+const PART_CATS=[['Přední brzdové destičky',40000,null],['Zadní brzdové destičky',50000,null],['Přední brzdové kotouče',80000,null],['Zadní brzdové kotouče',100000,null],['Motorový olej',15000,12],['Olej v převodovce',60000,null],['Olej v rozvodovce / diferenciálu',60000,null],['Vzduchový filtr',30000,null],['Palivový filtr',40000,null],['Kabinový filtr',null,12],['Zapalovací svíčky',40000,null],['Rozvody',120000,60],['Autobaterie',null,60],['Brzdová kapalina',null,24],['Chladicí kapalina',null,60],['Stěrače',null,12],['Tlumiče',100000,null],['Jiný díl',null,null]];
+function partLife(x){const t=x.taskId?db.tasks.find(y=>y.id===x.taskId&&!y.deleted&&!y.done):null;return t?{km:t.intervalKm||null,mo:t.intervalMonths||null,task:t}:{km:x.lifeKm||null,mo:x.lifeMonths||null,task:null};}
+function partInfo(x,cur){
+  const LF=partLife(x);
+  const C=cfg(),end=x.removedDate||todayIso(),endOdo=x.removedDate?x.removedOdo:cur;
+  const km=x.odo!=null&&endOdo!=null&&endOdo>=x.odo?endOdo-x.odo:null,days=Math.max(0,Math.round((pd(end)-pd(x.date))/DAY));
+  const r={km:km,days:days,status:null,leftKm:null,leftDays:null};
+  if(x.removedDate)return r;
+  if(LF.km&&km!=null)r.leftKm=LF.km-km;
+  if(LF.mo)r.leftDays=Math.round((pd(addMonths(x.date,LF.mo))-pd(todayIso()))/DAY);
+  if(r.leftKm==null&&r.leftDays==null)return r;
+  if((r.leftKm!=null&&r.leftKm<0)||(r.leftDays!=null&&r.leftDays<0))r.status='late';
+  else if((r.leftKm!=null&&r.leftKm<=LF.km*C.kmPct/100)||(r.leftDays!=null&&r.leftDays<=C.days))r.status='soon';
+  else r.status='ok';
+  return r;
+}
+const yrs=d=>d/365.25;
+function partAge(d){return d<60?nf(d)+' dní':(d<730?nf(d/30.44,0)+' měs.':nf(yrs(d),1)+' r.');}
+const OBLIG=/^(STK|Měření emisí|Pojištění|Dálniční známka)/i;
+function healthScore(v){
+  const parts=[],cur=currentOdo(v),daily=dailyKm(v),car=vehicleById(v)||{},c=car.card||{},C=cfg();
+  const pts={ok:1,soon:0.5,late:0},lbl={ok:'v pořádku',soon:'brzy',late:'po termínu'};
+  const tasks=live('tasks',v).filter(t=>!t.done),maint=tasks.filter(t=>!OBLIG.test(t.name)),obl=tasks.filter(t=>OBLIG.test(t.name));
+  const yAgo=addMonths(todayIso(),-12),doneOne=live('tasks',v).filter(t=>t.done&&!OBLIG.test(t.name)&&(t.doneDate||'')>=yAgo).length;
+  const summ=(list,extraOk,extraSt)=>{const items=list.map(t=>({s:taskInfo(t,cur,daily).status,w:PRIO[prioOf(t)][2]})).concat(Array(extraOk||0).fill(0).map(()=>({s:'ok',w:1})),(extraSt||[]).map(x=>({s:x,w:1}))),st=items.map(x=>x.s),n=k=>st.filter(x=>x===k).length,W=items.reduce((a,x)=>a+x.w,0);
+    return {frac:items.reduce((a,x)=>a+x.w*pts[x.s],0)/W,state:n('late')?'late':(n('soon')?'soon':'ok'),note:[n('late')?'po termínu: '+n('late'):'',n('soon')?'brzy: '+n('soon'):''].filter(Boolean).join(', ')||'vše v pořádku ('+st.length+')'};};
+  const pl=live('parts',v).filter(x=>!x.removedDate&&!x.taskId).map(x=>({x:x,i:partInfo(x,cur)})).filter(o=>o.i.status);
+  if(maint.length||doneOne||pl.length){const m=summ(maint,doneOne,pl.map(o=>o.i.status));if(pl.length)m.note+=' · díly s limitem: '+pl.length;parts.push({name:'Údržba (úkony a díly)',max:35,frac:m.frac,state:m.state,note:m.note+(doneOne?' · splněných jednorázových za 12 měsíců: '+doneOne:'')});}
+  const st=tireKm(v),mt=live('tires',v).filter(t=>st.mounted.indexOf(t.id)>=0).map(tireState).filter(Boolean);
+  if(mt.length){const w={late:2,soon:1,ok:0},worst=mt.sort((a,b)=>w[b]-w[a])[0];
+    parts.push({name:'Pneumatiky',max:20,frac:pts[worst],state:worst,note:'stáří a dezén nasazené sady: '+lbl[worst]});}
+  const items=[];
+  obl.forEach(t=>{const i=taskInfo(t,cur,daily);items.push({n:t.name,s:i.status,d:i.days});});
+  [['Technická kontrola',c.stkTo,'stkTo',/^STK/i],['Povinné ručení',c.insPov,'insPov',/^Pojištění/i],['Havarijní pojištění',c.insHav,'insHav',/^Pojištění/i]].forEach(x=>{
+    if(!x[1]||obl.some(t=>x[3].test(t.name)))return;const d=Math.round((pd(x[1])-pd(todayIso()))/DAY);items.push({n:x[0],s:d<0?'late':(d<=C.days?'soon':'ok'),d:d});});
+  if(items.length){const frac=items.reduce((a,x)=>a+pts[x.s],0)/items.length;
+    parts.push({name:'Povinnosti (STK, emise, pojištění)',max:15,frac:frac,state:items.some(x=>x.s==='late')?'late':(items.some(x=>x.s==='soon')?'soon':'ok'),note:items.map(x=>x.n+': '+(x.d==null?lbl[x.s]:(x.d<0?'po termínu':'za '+nf(x.d)+' dní'))).join(' · ')});}
+  const ex=fuelSegments(v),a0=ex.length>=3?consStats(ex).avg:approxCons(v,0),a5=ex.length>=3?consStats(ex).avg5:approxCons(v,5);
+  if(a0&&a5&&sortedFuels(v).length>=7){const r=a5/a0,f=r<=1.1?1:(r<=1.25?0.5:0);
+    parts.push({name:'Provoz (trend spotřeby)',max:10,frac:f,state:f===1?'ok':(f?'soon':'late'),note:'posledních 5 tankování '+(r>=1?'+':'')+nf((r-1)*100,0)+' % proti průměru'});}
+  const tot=parts.reduce((a,x)=>a+x.max,0),got=parts.reduce((a,x)=>a+x.max*x.frac,0);
+  parts.forEach(x=>{x.share=tot?Math.round(x.max/tot*100):0;});
+  const score=tot?Math.round(got/tot*100):null;
+  return {score:score,parts:parts,label:score==null?'':(score>=85?'Výborný':(score>=65?'Dobrý':(score>=40?'Pozor':'Špatný'))),state:score==null?'ok':(score>=85?'ok':(score>=65?'ok':(score>=40?'soon':'late')))};
+}
+function healthSheet(){
+  const v=vid(),H=healthScore(v);
+  let b='<div class="big" style="margin-top:0">'+(H.score!=null?H.score+' / 100':'–')+'</div><div class="sub">'+H.label+'</div><div class="list" style="margin-top:10px">'
+   +H.parts.map(x=>'<div class="row" style="cursor:default"><div class="r1"><b>'+x.name+'</b><span class="chip '+x.state+'">'+nf(x.frac*100,0)+' %</span></div><div class="r2">váha '+x.share+' % · '+esc(x.note)+(x.frac<1?' · −'+nf(x.share*(1-x.frac),0)+' b.':'')+'</div></div>').join('')+'</div>'
+   +'<p class="sub" style="margin:10px 2px 0">Orientační skóre jen z toho, co je v aplikaci zapsané: údržba, povinnosti (STK, emise, pojištění), pneumatiky a trend spotřeby. Váhy jsou 35 / 15 / 20 / 10 a části bez dat se nepočítají, ostatní se přepočítají na 100 %. Nenahrazuje technickou prohlídku.</p>';
+  if(!H.parts.length)b='<div class="empty">Zatím není z čeho skóre spočítat. Doplň úkony, termíny na kartě vozidla nebo pneumatiky.</div>';
+  openSheet('Zdraví auta',b,{saveLabel:'Zavřít'});
+}
+const defaultTiles=v=>['health','odo','cons','kml','fuelkm','totalkm'].concat(live('fixed',v).length?['allkm']:[],['avgprice','daily']);
+const tileOrder=v=>{const t=(db.settings||{}).tiles;return Array.isArray(t)?t.filter(id=>TILE_DEFS.some(d=>d[0]===id)):defaultTiles(v);};
+function tileHelp(id){
+  const v=vid(),D=homeD,Y=tilePer(id),def=TILE_DEFS.find(d=>d[0]===id);if(!def||!D)return;
+  const K=(k,x)=>'<div class="kv"><span>'+k+'</span><b>'+x+'</b></div>',box=r=>'<div class="card" style="margin:8px 0">'+r+'</div>',P=t=>'<p style="margin:8px 0;line-height:1.45">'+t+'</p>';
+  const yr=Y?'Počítá se jen za letošní rok ('+D.year+'), od posledního tankování loni do posledního letos.':'Počítá se za celou dobu evidence.';
+  const fu=sortedFuels(v),f0=fu[0],f1=fu[fu.length-1],ps=D.ps,cost=D.cost;
+  const fuelBlock=()=>Y?box(K('Ujeto letos',nf(ps.km)+' km')+K('Palivo letos',money(ps.spent)+' · '+nf(ps.liters,1)+' l')+K('Servis letos',money(ps.rep))):(cost?box(K('Ujeto (1. až poslední tankování)',nf(cost.km)+' km')+K('Palivo (bez 1. tankování)',money(cost.fuel))+K('Servis ve stejném období',money(cost.rep))):'');
+  let b='';
+  switch(id){
+   case 'health':b=P('Skóre 0–100 se skládá z údržby (úkony a díly s životností, váha 35), pneumatik (stáří DOT a dezén nasazené sady, 20), povinností (STK, emise, pojištění, 15) a trendu spotřeby (10). Části bez dat se vynechají a zbytek se přepočítá na 100 %. Stav „v pořádku" = plný počet, „brzy" = polovina, „po termínu" = nula; úkony s vysokou prioritou mají dvojnásobnou váhu.')+P('Rozpis po částech uvidíš po klepnutí na dlaždici mimo režim nápovědy.');break;
+   case 'odo':b=P('Nejvyšší stav tachometru ze všech záznamů: tankování, servis, provedené úkony, nasazení pneumatik a montáže dílů.')+box(K('Aktuální stav',D.cur!=null?nf(D.cur)+' km':'–'));break;
+   case 'cons':case 'kml':
+     if(Y)b=P(yr)+P('Spotřeba = litry natankované letos ÷ ujeté km × 100.'+(id==='kml'?' Km na litr = 100 ÷ spotřeba.':''))+box(K('Ujeto letos',nf(ps.km)+' km')+K('Spotřeba',ps.l100!=null?nf(ps.l100,1)+' l/100 km':'–')+(id==='kml'&&ps.l100?K('Km na litr',nf(100/ps.l100,2)+' km/l'):''));
+     else if(D.exact)b=P('Máš aspoň 3 úseky „plná–plná", takže spotřeba = litry mezi plnými nádržemi ÷ km mezi nimi × 100, přes všechny úseky.')+box(K('Úseků',D.segs.length)+K('Spotřeba',nf(D.aAll,1)+' l/100 km'));
+     else{const L=fu.slice(1).reduce((a,x)=>a+x.liters,0),km=f1&&f0?f1.odo-f0.odo:0;
+       b=P('Netankuješ vždy plnou, proto jde o odhad: všechny litry kromě úplně prvního tankování ÷ km mezi prvním a posledním tankováním × 100. První tankování se nepočítá, protože jeho palivo se projelo před začátkem evidence.'+(id==='kml'?' Km na litr = 100 ÷ spotřeba.':''))
+        +box(K('Období',f0?fdate(f0.date)+' – '+fdate(f1.date):'–')+K('Litry',nf(L,1)+' l')+K('Ujeto',nf(km)+' km')+K('Spotřeba',D.aAll!=null?nf(D.aAll,1)+' l/100 km':'–')+(id==='kml'&&D.aAll?K('Km na litr',nf(100/D.aAll,2)+' km/l'):''));}
+     break;
+   case 'fuelkm':b=P(yr)+P('Palivo na km = cena za palivo ÷ ujeté km. Bez servisu a fixních nákladů.')+fuelBlock()+box(K('Výsledek',(Y?ps.fuelPerKm:(cost&&cost.fuelPerKm))!=null?nf(Y?ps.fuelPerKm:cost.fuelPerKm,2)+' Kč/km':'–'));break;
+   case 'totalkm':b=P(yr)+P('Celkem na km = (palivo + servis a opravy) ÷ ujeté km. Servis se bere jen v období mezi prvním a posledním tankováním.')+fuelBlock()+box(K('Výsledek',(Y?ps.totalPerKm:(cost&&cost.totalPerKm))!=null?nf(Y?ps.totalPerKm:cost.totalPerKm,2)+' Kč/km':'–'));break;
+   case 'allkm':{const a=Y?ps:D.all;b=P(yr)+P('Jako „Celkem na km", jen se přičtou fixní náklady (pojištění, dálniční známka). Ty se rozpočítají podle dnů: roční částka × počet dní v období ÷ 365.')+box(K('Ujeto',nf(a.km||0)+' km')+K('Palivo',money(a.spent||0))+K('Servis',money(a.rep||0))+K('Fixní (poměrně)',money(a.fixed||0))+K('Výsledek',a.allPerKm!=null?nf(a.allPerKm,2)+' Kč/km':'–'));break;}
+   case 'avgprice':b=P((Y?'Za letošní rok: ':'Za celou dobu: ')+'všechny zaplacené částky za palivo ÷ všechny natankované litry. Je to tedy průměr vážený litry, ne průměr cen z účtenek.')+box(Y?K('Zaplaceno',money(ps.spent))+K('Litrů',nf(ps.liters,1))+K('Cena',ps.liters?nf(ps.spent/ps.liters,2)+' Kč/l':'–'):K('Zaplaceno',money(D.C))+K('Litrů',nf(D.L,1))+K('Cena',D.L?nf(D.C/D.L,2)+' Kč/l':'–'));break;
+   case 'daily':{const pts=odoPoints(v).sort((a,c)=>a.date.localeCompare(c.date));b=P('Nájezd = (nejvyšší − nejnižší stav tachometru) ÷ počet dní mezi prvním a posledním záznamem. Měsíční odhad = denní × 30,44.')+(pts.length>1?box(K('Období',fdate(pts[0].date)+' – '+fdate(pts[pts.length-1].date))+K('Km/den',D.daily?nf(D.daily,1):'–')):'');break;}
+   case 'kmyear':{const all=odoPoints(v).slice().sort((x,c)=>x.date.localeCompare(c.date)||x.odo-c.odo),y0=D.year+'-01-01',bf=all.filter(x=>x.date<y0).pop(),inY=all.filter(x=>x.date>=y0);
+     b=P('Nájezd letos = poslední letošní stav tachometru − poslední stav z loňska. Započtou se tak i km mezi koncem loňska a prvním letošním záznamem. Tempo za rok = km ÷ dny od 1. 1. × 365.')+(inY.length?box(K('Výchozí stav',(bf?nf(bf.odo)+' km ('+fdate(bf.date)+')':nf(inY[0].odo)+' km (první letošní)'))+K('Poslední stav',nf(inY[inY.length-1].odo)+' km ('+fdate(inY[inY.length-1].date)+')')+K('Nájezd letos',nf(inY[inY.length-1].odo-(bf?bf.odo:inY[0].odo))+' km')):'');break;}
+   case 'bizkm':b=P('Součet km letošních služebních jízd (Tankování → Služební jízdy). Náhrada každé jízdy = km × sazba + km × spotřeba ÷ 100 × cena paliva, s hodnotami uloženými u jízdy.');break;
+   case 'lastfuel':b=P('Poslední tankování podle data.');break;
+   case 'fueltotal':b=P(Y?'Součet všech letošních tankování (Kč a litry).':'Součet všech tankování za celou dobu evidence.');break;
+   case 'reptotal':b=P(Y?'Součet letošních zápisů v Servisu (díly + práce).':'Součet všech zápisů v Servisu (díly + práce).');break;
+   case 'tco':case 'tcokm':case 'tcoyear':{const t=D.t;b=P('TCO = ztráta hodnoty + palivo + servis + fixní náklady za celou dobu držení (od data pořízení na kartě vozidla, jinak od prvního záznamu). Ztráta hodnoty = pořizovací cena − prodejní cena nebo odhad současné hodnoty. Na km = TCO ÷ ujeté km od koupě; za rok = TCO ÷ dny držení × 365,25.');
+     if(t)b+=box(K('Období',fdate(t.from)+' – '+fdate(t.to)+' ('+nf(t.days)+' dní)')+(t.km!=null?K('Ujeto',nf(t.km)+' km'):'')+K('Ztráta hodnoty',t.buy!=null?money(t.deprec):'pořizovací cena nezadána')+K('Palivo',money(t.fuel))+K('Servis',money(t.rep))+K('Fixní',money(t.fixed))+K('TCO celkem',money(t.total))+K('Na km',t.perKm!=null?nf(t.perKm,2)+' Kč':'–')+K('Za rok',t.perYear!=null?money(t.perYear):'–'));break;}
+   case 'opmonth':if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,fx=fixedShare(v,D.year+'-01-01',todayIso()),tot=ps.spent+ps.rep+fx;
+       b=P('Letošní provozní náklady (palivo + servis + fixní poměrně) ÷ dny od 1. 1. × 30,44 (průměrný počet dní v měsíci).')+box(K('Palivo',money(ps.spent))+K('Servis',money(ps.rep))+K('Fixní (poměrně)',money(fx))+K('Součet',money(tot))+K('Dní',nf(days))+K('Měsíčně',days>=15?money(tot/days*30.44):'–'));}
+     else{const t=D.t;b=P('Provozní náklady (palivo + servis + fixní náklady poměrně podle dnů) za celou dobu držení ÷ počet dní × 30,44. Pořizovací cena ani ztráta hodnoty se nezapočítávají.')+(t?box(K('Období',fdate(t.from)+' – '+fdate(t.to)+' ('+nf(t.days)+' dní)')+K('Palivo',money(t.fuel))+K('Servis',money(t.rep))+K('Fixní (poměrně)',money(t.fixed))+K('Součet',money(t.operating))+K('Měsíčně',t.opPerMonth!=null?money(t.opPerMonth):'–')):'');}
+     break;
+  }
+  openSheet('Jak se počítá: '+def[1],b||P('Bez podrobností.'),{saveLabel:'Zavřít'});
+}
+function tilesSheet(){
+  const v=vid();let on=tileOrder(v).slice(),per=Object.assign({},(db.settings||{}).tilePeriod||{});
+  const all=()=>on.concat(TILE_DEFS.map(d=>d[0]).filter(id=>on.indexOf(id)<0));
+  const draw=()=>{const ids=all();$('#te').innerHTML=ids.map((id,i)=>'<div class="row2"><label><input type="checkbox" data-tg="'+id+'"'+(on.indexOf(id)>=0?' checked':'')+'> '+TILE_DEFS.find(d=>d[0]===id)[1]+'</label>'+(on.indexOf(id)>=0?'<button type="button" class="mv" data-mv="'+id+'" data-dir="-1" aria-label="Posunout nahoru">▲</button><button type="button" class="mv" data-mv="'+id+'" data-dir="1" aria-label="Posunout dolů">▼</button>':'')+'</div>'+(on.indexOf(id)>=0&&TILE_DEFS.find(d=>d[0]===id)[3]?'<div class="row2" style="padding:0 0 8px 28px;border-bottom:1px solid var(--line);margin-top:-1px"><select class="f" data-tp="'+id+'" aria-label="Období"><option value="all"'+(per[id]==='year'?'':' selected')+'>Za celou dobu</option><option value="year"'+(per[id]==='year'?' selected':'')+'>Jen letošní rok</option></select></div>':'')).join('');};
+  openSheet('Ukazatele v přehledu','<p class="sub" style="margin:0 0 6px">Zaškrtni, co chceš vidět, a šipkami změň pořadí. U ukazatelů, kde to dává smysl, můžeš zvolit jen letošní rok.</p><div class="tiles-ed" id="te"></div><div class="actions"><button type="button" class="btn" id="te_reset">Výchozí sada</button></div>',{
+    after(){draw();
+      $('#te').onclick=e=>{const b=e.target.closest('[data-mv]');if(!b)return;const id=b.dataset.mv,i=on.indexOf(id),j=i+ +b.dataset.dir;if(i<0||j<0||j>=on.length)return;on.splice(i,1);on.splice(j,0,id);draw();};
+      $('#te').onchange=e=>{if(e.target.dataset.tp){per[e.target.dataset.tp]=e.target.value;return;}const id=e.target.dataset.tg;if(!id)return;if(e.target.checked){if(on.indexOf(id)<0)on.push(id);}else on=on.filter(x=>x!==id);draw();};
+      $('#te_reset').onclick=()=>{on=defaultTiles(v);draw();};
+    },
+    onSave(){saveSettings({tiles:on.slice(),tilePeriod:per});}
+  });
+}
+function viewHome(v){
+  const cur=currentOdo(v),segs=fuelSegments(v),exact=segs.length>=3,cs=consStats(segs),cost=costStats(v),daily=dailyKm(v);
+  const aAll=exact?cs.avg:approxCons(v,0);
+  const fuels=live('fuelings',v),L=fuels.reduce((s,f)=>s+f.liters,0),C=sumCost(fuels),all=live('fixed',v).length>0?periodStats(v,''):{};
+  const year=String(new Date().getFullYear()),D=homeD={year:year,ps:periodStats(v,year),cur:cur,segs:segs,exact:exact,cs:cs,cost:cost,daily:daily,aAll:aAll,L:L,C:C,all:all,t:tco(v)};
+  let h='<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Tankování</button><button class="btn" data-act="new-repair">🔧 Servis</button><button class="btn" data-act="trip">🧮 Cesta</button></div>';
+  const ids=tileOrder(v);
+  if(helpMode)h+='<div class="helpbar" role="status">Klepni na dlaždici a ukážu, z čeho a jak se počítá. <button class="btn" data-act="help-mode" style="padding:4px 10px;margin-left:6px">Zrušit</button></div>';
+  h+=ids.length?'<div class="grid'+(helpMode?' helpon':'')+'">'+ids.map(id=>TILE_DEFS.find(d=>d[0]===id)[2](v,D,tilePer(id)).replace(/^<div /,'<div data-tile="'+id+'" ')).join('')+'</div>':'<div class="empty">Žádné ukazatele. Přidej je přes Upravit ukazatele.</div>';
+  h+='<div class="actions" style="margin-top:8px"><button class="btn" data-act="edit-tiles">⚙ Upravit ukazatele</button><button class="btn" data-act="help-mode" aria-pressed="'+helpMode+'" aria-label="Jak se ukazatele počítají" title="Jak se ukazatele počítají" style="flex:0 0 auto;min-width:48px;font-weight:700">?</button></div>';
+  const tasks=live('tasks',v).filter(t=>!t.done).map(t=>taskRow(t,cur,daily)).filter(x=>x.info.status!=='ok').sort(taskCmp);
+  const ins=insInfo((vehicleById(v)||{}).card).filter(x=>x.status!=='ok');
+  const insHtml=ins.map(x=>'<button class="row" data-act="edit-card"><div class="r1"><b>'+x.name+'</b><span class="chip '+x.status+'">'+(x.status==='late'?'⚠ Vypršelo':'● Brzy')+'</span></div><div class="r2">platné do '+fdate(x.date)+(x.days<0?' (před '+nf(-x.days)+' dny)':' (za '+nf(x.days)+' dní)')+'</div></button>').join('');
+  h+='<h2>Pozor na</h2>';
+  if(insHtml)h+='<div class="list">'+insHtml+'</div>';
+  if(insHtml&&!tasks.length){}else h+=tasks.length?'<div class="list">'+tasks.map(x=>x.html).join('')+'</div>':'<div class="empty">'+(live('tasks',v).filter(t=>!t.done).length?'Nic nehoří, všechny úkony jsou v pořádku.':'Zatím žádné periodické úkony.')+'</div>';
+  return h;
+}
+const LEGAL={rate:5.90,ba:41.80,nm:44.50,src:'vyhláška 573/2025 Sb. ve znění 175/2026 Sb. (od 1. 10. 2026)'};
+function tripCfg(v){
+  const car=vehicleById(v)||{},c=car.card||{},t=car.trip||{};
+  const diesel=/naft|diesel|NM/i.test(c.fuel||'');
+  let cons=t.cons;if(cons==null){const m=/(?:průměr|kombin\w*)\s*([\d]+[,.]?\d*)/i.exec(c.tpCons||'')||/([\d]+[,.]\d+)/.exec(c.tpCons||'');cons=m?+m[1].replace(',','.'):null;}
+  const own=(()=>{const f=sortedFuels(v).slice().sort((a,b)=>a.date.localeCompare(b.date)).slice(-5),L=f.reduce((s,x)=>s+x.liters,0);return L>0?sumCost(f)/L:null;})();
+  const mode=t.priceMode||'legal',price=mode==='own'?own:(mode==='fixed'?t.price:(diesel?LEGAL.nm:LEGAL.ba));
+  return {rate:t.rate!=null?t.rate:LEGAL.rate,cons:cons,mode:mode,price:price,own:own,diesel:diesel,fixedPrice:t.price};
+}
+const jz=n=>n+' '+(n===1?'jízda':(n>1&&n<5?'jízdy':'jízd'));
+const tripKm=x=>x.odoEnd!=null&&x.odoStart!=null?x.odoEnd-x.odoStart:(x.km||0);
+const tripPay=x=>{const k=tripKm(x);return k*(x.rate||0)+(x.cons&&x.price?k*x.cons/100*x.price:0);};
+function tripForm(id){
+  const v=vid(),ex=id?db.trips.find(x=>x.id===id):null,cur=currentOdo(v),C=tripCfg(v);
+  const last=live('trips',v).sort((a,b)=>b.date.localeCompare(a.date))[0];
+  openSheet(ex?'Upravit služební jízdu':'Nová služební jízda',
+   '<label for="j_date">Datum</label><input id="j_date" type="date" value="'+(ex?ex.date:todayIso())+'">'
+   +'<div class="two"><div><label for="j_from">Odkud</label><input id="j_from" value="'+esc(ex?ex.from||'':(last?last.from||'':''))+'"></div><div><label for="j_to">Kam</label><input id="j_to" value="'+esc(ex?ex.to||'':'')+'"></div></div>'
+   +'<label for="j_purpose">Účel</label><input id="j_purpose" value="'+esc(ex?ex.purpose||'':'')+'" placeholder="např. jednání u zákazníka">'
+   +'<div class="two"><div><label for="j_os">Tachometr začátek</label><input id="j_os" inputmode="numeric" value="'+(ex?(ex.odoStart!=null?ex.odoStart:''):(cur!=null?cur:''))+'"></div><div><label for="j_oe">Tachometr konec</label><input id="j_oe" inputmode="numeric" value="'+(ex&&ex.odoEnd!=null?ex.odoEnd:'')+'"></div></div>'
+   +'<label for="j_km">Ujeto (km)</label><input id="j_km" inputmode="numeric" value="'+(ex?tripKm(ex):'')+'">'
+   +'<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:15px;color:var(--ink)"><input type="checkbox" id="j_rt"> Zpáteční (km × 2)</label>'
+   +'<details style="margin-top:10px"><summary class="sub" style="cursor:pointer">Náhrada: '+nf(ex?ex.rate:C.rate,2)+' Kč/km + palivo '+(((ex?ex.cons:C.cons))?nf(ex?ex.cons:C.cons,1)+' l/100 km × '+nf(ex?ex.price:C.price,2)+' Kč/l':'(chybí spotřeba)')+'</summary>'
+   +'<div class="two"><div><label for="j_rate">Sazba (Kč/km)</label><input id="j_rate" inputmode="decimal" value="'+nf(ex?ex.rate:C.rate,2)+'"></div><div><label for="j_cons">Spotřeba TP (l/100 km)</label><input id="j_cons" inputmode="decimal" value="'+((ex?ex.cons:C.cons)!=null?nf(ex?ex.cons:C.cons,1):'')+'"></div></div>'
+   +'<label for="j_price">Cena paliva (Kč/l)</label><input id="j_price" inputmode="decimal" value="'+((ex?ex.price:C.price)!=null?nf(ex?ex.price:C.price,2):'')+'"></details>'
+   +'<div class="res" id="j_res" style="margin-top:10px"></div>'
+   +'<label for="j_note">Poznámka</label><input id="j_note" value="'+esc(ex?ex.note||'':'')+'">',{
+    after(){
+      const calc=()=>{const os=num(val('j_os')),oe=num(val('j_oe'));let km=num(val('j_km'));
+        const k=(km||0)*($('#j_rt').checked?2:1),r=num(val('j_rate'))||0,c=num(val('j_cons'))||0,pr=num(val('j_price'))||0;
+        $('#j_res').innerHTML=k>0?'<b>'+nf(k)+' km</b> · náhrada <b>'+money(k*r+k*c/100*pr)+'</b> <span class="sub">(sazba '+money(k*r)+' + palivo '+money(k*c/100*pr)+')</span>':'';};
+      $('#j_oe').oninput=()=>{const os=num(val('j_os')),oe=num(val('j_oe'));if(os!=null&&oe!=null&&oe>=os){$('#j_km').value=oe-os;$('#j_rt').checked=false;}calc();};
+      $('#j_os').oninput=$('#j_oe').oninput;
+      $('#j_km').oninput=()=>{const os=num(val('j_os')),km=num(val('j_km'));if(os!=null&&km!=null&&km>=0)$('#j_oe').value=os+km*($('#j_rt').checked?2:1);calc();};
+      $('#j_rt').onchange=$('#j_km').oninput;
+      ['j_rate','j_cons','j_price'].forEach(i=>$('#'+i).oninput=calc);calc();
+    },
+    onSave(){
+      const date=val('j_date'),os=num(val('j_os')),r=num(val('j_rate')),c=num(val('j_cons')),pr=num(val('j_price'));
+      let km=num(val('j_km')),oe=num(val('j_oe'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if([os,oe,km,r,c,pr].some(x=>isNaN(x)))return 'Některé číslo je neplatné.';
+      if(km!=null&&$('#j_rt').checked)km*=2;
+      if(os!=null&&km!=null&&(oe==null||$('#j_rt').checked))oe=os+km;
+      if(os!=null&&oe!=null){if(oe<os)return 'Konečný stav tachometru je nižší než počáteční.';km=oe-os;}
+      if(!(km>0))return 'Zadej ujeté km nebo stav tachometru na konci.';
+      if(os!=null){const e=checkOdo(v,date,os,ex?ex.id+'-s':null);if(e)return e;}
+      if(oe!=null){const e=checkOdo(v,date,oe,ex?ex.id:null);if(e)return e;}
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{date:date,from:val('j_from').trim(),to:val('j_to').trim(),purpose:val('j_purpose').trim(),odoStart:os!=null?Math.round(os):null,odoEnd:oe!=null?Math.round(oe):null,km:Math.round(km),rate:r||0,cons:c||null,price:pr||null,note:val('j_note').trim()});
+      touch(rec);if(!ex)db.trips.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function tripSettings(){
+  const v=vid(),car=vehicleById(v),C=tripCfg(v);
+  openSheet('Náhrady za služební jízdy',
+   '<p class="sub" style="margin:0 0 6px">Náhrada = km × sazba + km × spotřeba ÷ 100 × cena paliva. Hodnoty se použijí pro nové jízdy; u uložených jízd zůstávají ty, se kterými byly zapsány.</p>'
+   +'<label for="ts_rate">Sazba základní náhrady (Kč/km)</label><input id="ts_rate" inputmode="decimal" value="'+nf(C.rate,2)+'">'
+   +'<label for="ts_cons">Spotřeba podle TP (l/100 km, kombinovaná)</label><input id="ts_cons" inputmode="decimal" value="'+(C.cons!=null?nf(C.cons,1):'')+'">'
+   +'<label for="ts_mode">Cena paliva</label><select class="f" id="ts_mode"><option value="legal"'+(C.mode==='legal'?' selected':'')+'>Průměrná podle vyhlášky ('+nf(C.diesel?LEGAL.nm:LEGAL.ba,2)+' Kč/l, '+(C.diesel?'nafta':'benzín 95')+')</option><option value="own"'+(C.mode==='own'?' selected':'')+'>Z mých posledních 5 tankování'+(C.own?' ('+nf(C.own,2)+' Kč/l)':'')+'</option><option value="fixed"'+(C.mode==='fixed'?' selected':'')+'>Vlastní cena</option></select>'
+   +'<div id="ts_pb"><label for="ts_price">Vlastní cena (Kč/l)</label><input id="ts_price" inputmode="decimal" value="'+(C.fixedPrice!=null?nf(C.fixedPrice,2):'')+'"></div>'
+   +'<p class="sub">Výchozí sazby: '+LEGAL.src+'. Spotřeba se předvyplní z karty vozidla.</p>',{
+    after(){const sy=()=>{$('#ts_pb').style.display=$('#ts_mode').value==='fixed'?'':'none';};$('#ts_mode').onchange=sy;sy();},
+    onSave(){const r=num(val('ts_rate')),c=num(val('ts_cons')),pr=num(val('ts_price')),m=val('ts_mode');
+      if(isNaN(r)||isNaN(c)||isNaN(pr)||(r!=null&&r<0))return 'Neplatné číslo.';
+      if(m==='fixed'&&!(pr>0))return 'Zadej vlastní cenu paliva.';
+      car.trip={rate:r!=null?r:LEGAL.rate,cons:c,priceMode:m,price:pr};touch(car);persist();}
+  });
+}
+function viewTrips(v){
+  const list=live('trips',v).sort((a,b)=>b.date.localeCompare(a.date)||(b.odoEnd||0)-(a.odoEnd||0)),y=String(new Date().getFullYear()),ym=todayIso().slice(0,7);
+  const sum=f=>{const l=list.filter(f);return {km:l.reduce((s,x)=>s+tripKm(x),0),pay:l.reduce((s,x)=>s+tripPay(x),0),n:l.length};};
+  const sm=sum(x=>x.date.startsWith(ym)),sy=sum(x=>x.date.startsWith(y));
+  const pts=odoPoints(v).slice().sort((a,b)=>a.date.localeCompare(b.date)||a.odo-b.odo),bf=pts.filter(x=>x.date<y+'-01-01').pop(),iy=pts.filter(x=>x.date>=y+'-01-01');
+  const kmY=iy.length?iy[iy.length-1].odo-(bf?bf.odo:iy[0].odo):0;
+  let h='<div class="actions"><button class="btn primary" data-act="new-trip">+ Služební jízda</button><button class="btn" data-act="trip-set">⚙ Náhrady</button></div>';
+  h+='<div class="grid">'+tile('Služební km tento měsíc',nf(sm.km)+' <small>km</small>',jz(sm.n)+' · '+money(sm.pay))+tile('Služební km letos',nf(sy.km)+' <small>km</small>',(kmY>0?nf(sy.km/kmY*100,0)+' % z '+nf(kmY)+' km':'')+'')+tile('Náhrady letos',money(sy.pay),jz(sy.n))+tile('Soukromé km letos',kmY>0?nf(Math.max(0,kmY-sy.km))+' <small>km</small>':'–','nájezd − služební')+'</div>';
+  h+='<p class="sub" style="margin:4px 2px 8px">Náhrady jsou jen pro přehled. Do nákladů, TCO ani statistik se nezapočítávají.</p>';
+  if(!list.length)return h+'<div class="empty">Zatím žádné služební jízdy.</div>';
+  let mon='';h+='<div class="list">';
+  list.forEach(x=>{const m=x.date.slice(0,7);if(m!==mon){mon=m;const s=sum(z=>z.date.startsWith(m));h+='</div><h2>'+monthLabel(m)+' · '+nf(s.km)+' km · '+money(s.pay)+'</h2><div class="list">';}
+    h+='<button class="row" data-act="edit-trip" data-id="'+x.id+'"><div class="r1"><b>'+esc([x.from,x.to].filter(Boolean).join(' → ')||'Služební jízda')+'</b><span>'+nf(tripKm(x))+' km</span></div><div class="r2">'+fdate(x.date)+(x.purpose?' · '+esc(x.purpose):'')+' · náhrada '+money(tripPay(x))+(x.odoStart!=null&&x.odoEnd!=null?' · '+nf(x.odoStart)+'–'+nf(x.odoEnd):'')+'</div></button>';});
+  return h+'</div>';
+}
+function viewFuelTab(v){
+  const seg='<div class="seg"><button data-fsub="fuel" aria-pressed="'+(fuelSub==='fuel')+'">Tankování</button><button data-fsub="trips" aria-pressed="'+(fuelSub==='trips')+'">Služební jízdy</button></div>';
+  return seg+(fuelSub==='trips'?viewTrips(v):viewFuel(v));
+}
+function viewFuel(v){
+  const segs=fuelSegments(v),map={};segs.forEach(s=>map[s.id]=s);
+  const list=live('fuelings',v).sort((a,b)=>b.date.localeCompare(a.date)||b.odo-a.odo);
+  let h='<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Nové tankování</button></div>';
+  if(!list.length)return h+'<div class="empty">Zatím žádné tankování.</div>';
+  h+='<div class="list">'+list.map(f=>{const s=map[f.id];
+    return '<button class="row" data-act="edit-fuel" data-id="'+f.id+'"><div class="r1"><b>'+fdate(f.date)+' · '+nf(f.odo)+' km</b><span>'+money(f.total)+'</span></div><div class="r2">'+nf(f.liters,2)+' l · '+nf(f.total/f.liters,2)+' Kč/l'+(f.full?'':' · částečné')+(s?' · <b>'+nf(s.l100,1)+' l/100 km</b>':'')+(f.note?' · '+esc(f.note):'')+'</div></button>';}).join('')+'</div>';
+  return h;
+}
+function viewService(v){
+  const list=live('repairs',v).sort((a,b)=>b.date.localeCompare(a.date));
+  const total=list.reduce((s,r)=>s+repCost(r),0);
+  let h='<div class="actions"><button class="btn primary" data-act="new-repair">🔧 Nový servis / oprava</button></div>';
+  if(!list.length)return h+'<div class="empty">Zatím žádné opravy.</div>';
+  h+='<div class="sub" style="margin:0 2px 8px">Celkem: <b>'+money(total)+'</b></div><div class="list">'+list.map(r=>
+    '<button class="row" data-act="edit-repair" data-id="'+r.id+'"><div class="r1"><b>'+esc(r.title)+'</b><span>'+money(repCost(r))+'</span></div><div class="r2">'+fdate(r.date)+(r.odo!=null?' · '+nf(r.odo)+' km':'')+(r.shop?' · '+esc(r.shop):'')+((r.parts||r.labor)?' · díly '+money(r.parts)+', práce '+money(r.labor):'')+'</div></button>').join('')+'</div>';
+  return h;
+}
+function viewTasks(v){
+  const seg='<div class="seg"><button data-sub="rep" aria-pressed="'+(tasksSub==='rep')+'">Servis</button><button data-sub="tasks" aria-pressed="'+(tasksSub==='tasks')+'">Úkony</button><button data-sub="fixed" aria-pressed="'+(tasksSub==='fixed')+'">Fixní náklady</button></div>';
+  if(tasksSub==='rep')return seg+viewService(v);
+  if(tasksSub==='fixed'){
+    const fx=live('fixed',v).sort((a,b)=>b.year-a.year||a.name.localeCompare(b.name,'cs'));
+    let h=seg+'<div class="actions"><button class="btn primary" data-act="new-fixed">+ Fixní náklad</button></div>';
+    if(!fx.length)return h+'<div class="empty">Pojištění, dálniční známka… Zadej částku za rok.</div>';
+    const years=[];fx.forEach(f=>{if(years.indexOf(f.year)<0)years.push(f.year);});
+    years.forEach(y=>{const items=fx.filter(f=>f.year===y);
+      h+='<h2>'+y+' · '+money(items.reduce((s,f)=>s+f.amount,0))+'</h2><div class="list">'+items.map(f=>'<button class="row" data-act="edit-fixed" data-id="'+f.id+'"><div class="r1"><b>'+esc(f.name)+'</b><span>'+money(f.amount)+'</span></div></button>').join('')+'</div>';});
+    return h;
+  }
+  const cur=currentOdo(v),daily=dailyKm(v);
+  const all=live('tasks',v),act=all.filter(t=>!t.done),done=all.filter(t=>t.done).sort((a,b)=>(b.doneDate||'').localeCompare(a.doneDate||''));
+  const rows=act.map(t=>({t:t,r:taskRow(t,cur,daily)})).sort((a,b)=>taskCmp(a.r,b.r));
+  let h=seg+'<div class="actions"><button class="btn primary" data-act="new-task">+ Nový úkon</button></div>';
+  h+=rows.length?'<div class="list">'+rows.map(x=>x.r.html+'<button class="btn" style="margin:-2px 0 6px" data-act="done-task" data-id="'+x.t.id+'">✓ Provedeno</button>').join('')+'</div>':'<div class="empty">Přidej třeba výměnu oleje, STK nebo pojištění.</div>';
+  if(done.length)h+='<h2>Hotové jednorázové úkony</h2><div class="list">'+done.map(t=>'<button class="row" data-act="edit-task" data-id="'+t.id+'"><div class="r1"><b>'+esc(t.name)+'</b><span class="chip ok">✓ Hotovo</span></div><div class="r2">'+(t.doneDate?fdate(t.doneDate):'')+(t.doneOdo!=null?' · '+nf(t.doneOdo)+' km':'')+'</div></button>').join('')+'</div>';
+  return h;
+}
+let lcMonthly=false;
+function lineChart(pts,d,unit){
+  const W=340,H=200,L=46,R=12,T=12,B=26,vals=pts.map(p=>p.v),ts=pts.map(p=>pd(p.date).getTime());
+  const t0=ts[0],t1=ts[ts.length-1],avg=vals.reduce((a,b)=>a+b,0)/vals.length;
+  let lo=Math.min.apply(null,vals),hi=Math.max.apply(null,vals);const pad=(hi-lo)*0.12||Math.abs(hi)*0.1||1;lo=lo-pad;hi=hi+pad;if(statMetric==='month'||lo<0&&Math.min.apply(null,vals)>=0)lo=Math.max(0,lo);
+  const X=i=>L+(t1===t0?(W-L-R)/2:(ts[i]-t0)/(t1-t0)*(W-L-R)),Y=y=>T+(1-(y-lo)/(hi-lo))*(H-T-B);
+  let g='';for(let k=0;k<=3;k++){const y=lo+(hi-lo)*k/3;g+='<line class="g" x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(y)+'" y2="'+Y(y)+'"/><text x="'+(L-5)+'" y="'+(Y(y)+3)+'" text-anchor="end">'+nf(y,d)+'</text>';}
+  const line=pts.map((p,i)=>(i?'L':'M')+X(i).toFixed(1)+' '+Y(p.v).toFixed(1)).join(' ');
+  const sh=x=>lcMonthly?monthLabel(x.slice(0,7)):fdate(x).replace(/ 20(\d\d)$/,' $1');
+  lcInfo={pts:pts,d:d,unit:unit};
+  const mn=Math.min.apply(null,vals),mx=Math.max.apply(null,vals),last=vals[vals.length-1];
+  return '<svg class="lc" viewBox="0 0 '+W+' '+H+'" role="img" aria-label="Graf: '+esc(unit)+' v čase">'+g
+   +'<line class="av" x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(avg)+'" y2="'+Y(avg)+'"/><path class="ln" d="'+line+'"/>'
+   +pts.map((p,i)=>'<circle class="d" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="'+(pts.length>40?2:3.5)+'"/><circle class="h" data-pt="'+i+'" cx="'+X(i).toFixed(1)+'" cy="'+Y(p.v).toFixed(1)+'" r="11"/>').join('')
+   +'<text x="'+L+'" y="'+(H-8)+'">'+sh(pts[0].date)+'</text><text x="'+(W-R)+'" y="'+(H-8)+'" text-anchor="end">'+sh(pts[pts.length-1].date)+'</text></svg>'
+   +'<div class="sub" id="lc_read" style="margin-top:4px">Poslední: <b>'+nf(last,d)+'</b> · Průměr: <b>'+nf(avg,d)+'</b> · Min: <b>'+nf(mn,d)+'</b> · Max: <b>'+nf(mx,d)+'</b> '+esc(unit)+'<br>Čárkovaně průměr. Klepni na bod pro hodnotu.</div>';
+}
+function viewStats(v){
+  const months=rankMonths(v,6),max=Math.max.apply(null,months.map(m=>m.fuel+m.svc).concat([1]));
+  let h='';
+  const years=periodYears(v);if(pYear&&years.indexOf(pYear)<0)pYear='';
+  const MN=['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
+  const ym=pYear?(pMonth?pYear+'-'+pMonth:pYear):'',ps=periodStats(v,ym);
+  h+='<h2>Celkem za období</h2><div class="two"><div><label for="p_year">Rok</label><select class="f" id="p_year"><option value="">Vše</option>'+years.map(y=>'<option'+(y===pYear?' selected':'')+'>'+y+'</option>').join('')+'</select></div>'
+   +'<div><label for="p_month">Měsíc</label><select class="f" id="p_month"'+(pYear?'':' disabled')+'><option value="">Celý rok</option>'+MN.map((m,i)=>{const k=String(i+1).padStart(2,'0');return '<option value="'+k+'"'+(k===pMonth?' selected':'')+'>'+m+'</option>';}).join('')+'</select></div></div>';
+  h+='<div class="grid" style="margin-top:10px">'+tile('Palivo',money(ps.spent),nf(ps.liters,0)+' l · '+ps.n+' tankování')+tile('Servis',money(ps.rep),ps.repN+' zápisů')
+   +tile('Celkové výdaje',money(ps.spent+ps.rep))+tile('Ujeto',ps.km>0?nf(ps.km)+' <small>km</small>':'–')
+   +tile('Spotřeba',ps.l100!=null?nf(ps.l100,1)+' <small>l/100 km</small>':'–',ps.l100!=null?'odhad z litrů a km':'málo dat v období')
+   +tile('Průměrná cena paliva',ps.liters>0?nf(ps.spent/ps.liters,2)+' <small>Kč/l</small>':'–')
+   +tile('Palivo na km',ps.fuelPerKm!=null?nf(ps.fuelPerKm,2)+' <small>Kč/km</small>':'–','jen tankování')
+   +tile('Celkem na km',ps.totalPerKm!=null?nf(ps.totalPerKm,2)+' <small>Kč/km</small>':'–','palivo + servis')
+   +(live('fixed',v).length?tile('Fixní náklady',money(ps.fixed),'poměrná část za sledované období')+tile('Vč. fixních na km',ps.allPerKm!=null?nf(ps.allPerKm,2)+' <small>Kč/km</small>':'–','palivo + servis + fixní'):'')+'</div>';
+  h+=yearCompare(v);
+  const t=tco(v),c0=(vehicleById(v)||{}).card||{};
+  if(t){
+    const kv=(k,x,bold)=>'<div class="kv"><span>'+k+'</span><b'+(bold?' style="font-size:17px"':'')+'>'+x+'</b></div>';
+    h+='<h2>Celkové náklady vlastnictví (TCO)</h2><div class="card">'
+      +kv('Sledované období',fdate(t.from)+' – '+(c0.sellDate?fdate(t.to):'dnes')+' ('+nf(t.days)+' dní)')
+      +(t.km!=null?kv('Ujeto za období',nf(t.km)+' km'):'')
+      +(t.buy!=null?kv('Pořizovací cena',money(t.buy)):'')
+      +(t.buy!=null?kv(t.residKind==='sell'?'Prodejní cena':(t.residKind==='est'?'Odhad současné hodnoty':'Zbytková hodnota (nezadána)'),t.resid!=null?'− '+money(t.resid):'–'):'')
+      +(t.buy!=null?kv('Ztráta hodnoty',money(t.deprec)):'')
+      +kv('Palivo',money(t.fuel))+kv('Servis a opravy',money(t.rep))+(live('fixed',v).length?kv('Fixní náklady',money(t.fixed)):'')
+      +kv('Celkem',money(t.total),true)
+      +kv('Na km',t.perKm!=null?nf(t.perKm,2)+' Kč':'–')+kv('Za rok',t.perYear!=null?money(t.perYear):'–')+kv('Za měsíc',t.perMonth!=null?money(t.perMonth):'–')
+      +'</div>'
+      +(t.buy==null?'<p class="sub" style="margin:6px 2px">Bez pořizovací ceny jde jen o provozní náklady. Doplň ji v Auto → Karta vozidla → Pořízení a prodej (u prodaného auta i prodejní cenu a datum, jinak odhad současné hodnoty).</p>':(t.resid==null?'<p class="sub" style="margin:6px 2px">Bez prodejní ceny nebo odhadu hodnoty se do ztráty hodnoty počítá celá pořizovací cena. Doplň odhad současné hodnoty.</p>':''))
+      +'<p class="sub" style="margin:2px 2px 0">TCO = ztráta hodnoty + palivo + servis + fixní náklady. Platí za celou dobu držení, nezávisle na filtru období výše.</p>';
+  }
+  return h;
+}
+function partForm(id,cat){
+  const v=vid(),ex=id?db.parts.find(x=>x.id===id):null,cur=currentOdo(v);
+  const c0=ex?ex.cat:(cat||''),def=PART_CATS.find(x=>x[0]===c0)||[c0,null,null];
+  const tasks=live('tasks',v).filter(t=>!t.done&&!isOneTime(t));
+  openSheet(ex?'Upravit díl':'Nový díl',
+   '<label for="p_cat">Díl</label><input id="p_cat" list="p_cats" autocomplete="off" value="'+esc(ex?ex.name:(cat||''))+'" placeholder="napiš nebo vyber, např. Přední destičky"><datalist id="p_cats">'+PART_CATS.filter(c=>c[0]!=='Jiný díl').map(c=>'<option value="'+c[0]+'">').join('')+'</datalist>'
+   +'<label for="p_spec">Značka / typ</label><input id="p_spec" value="'+esc(ex&&ex.spec||'')+'" placeholder="např. Brembo, Castrol 5W-30, Varta 95 Ah">'
+   +'<div class="two"><div><label for="p_date">Namontováno</label><input id="p_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="p_odo">Tachometr (km)</label><input id="p_odo" inputmode="numeric" value="'+(ex?(ex.odo!=null?ex.odo:''):(cur!=null?cur:''))+'"></div></div>'
+   +'<div class="two" id="p_lifebox"><div><label for="p_lkm">Životnost (km)</label><input id="p_lkm" inputmode="numeric" value="'+(ex?(ex.lifeKm||''):(def[1]||''))+'"></div>'
+   +'<div><label for="p_lmo">Životnost (měsíce)</label><input id="p_lmo" inputmode="numeric" value="'+(ex?(ex.lifeMonths||''):(def[2]||''))+'"></div></div>'
+   +'<label for="p_task">Propojit s úkonem</label><select class="f" id="p_task"><option value="">— nepropojovat —</option><option value="__new">+ Vytvořit nový úkon</option>'+tasks.map(t=>'<option value="'+t.id+'"'+(ex&&ex.taskId===t.id?' selected':'')+'>'+esc(t.name)+'</option>').join('')+'</select><p class="sub" id="p_tlife" style="margin:4px 0 0"></p>'
+   +'<label for="p_price">Cena dílu (Kč, jen pro informaci)</label><input id="p_price" inputmode="decimal" value="'+(ex&&ex.price!=null?ex.price:'')+'">'
+   +'<label for="p_note">Poznámka</label><input id="p_note" value="'+esc(ex&&ex.note||'')+'">'
+   +(ex&&ex.removedDate?'<p class="sub">Vyměněno '+fdate(ex.removedDate)+(ex.removedOdo!=null?' při '+nf(ex.removedOdo)+' km':'')+'.</p>':'')
+   +'<p class="sub">Životnost se předvyplní podle typu dílu, nech ji prázdnou, když ji nechceš hlídat. U dílu propojeného s úkonem se životnost bere z intervalu úkonu a výměna dílu úkon označí jako provedený. Cena u dílu se nepočítá do nákladů, náklady jsou jen v Servisu.</p>',{
+    after(){const sy=()=>{};
+      const tl=()=>{const nw=$('#p_task').value==='__new',t=db.tasks.find(y=>y.id===$('#p_task').value);$('#p_lifebox').style.display=t?'none':'';if(nw){$('#p_tlife').textContent='Vznikne opakovaný úkon s intervalem podle životnosti výše (km a/nebo měsíce), naposledy proveden k datu a tachometru montáže.';return;}$('#p_tlife').textContent=t?'Životnost podle úkonu: '+([t.intervalKm?nf(t.intervalKm)+' km':'',t.intervalMonths?t.intervalMonths+' měs.':''].filter(Boolean).join(' / ')||'úkon nemá interval'):'';};$('#p_task').onchange=tl;tl();
+      $('#p_cat').oninput=()=>{if(!ex){const d=PART_CATS.find(x=>x[0].toLowerCase()===$('#p_cat').value.trim().toLowerCase());if(d){$('#p_lkm').value=d[1]||'';$('#p_lmo').value=d[2]||'';}}};},
+    onSave(){
+      const nm0=val('p_cat').trim(),mc=PART_CATS.find(x=>x[0].toLowerCase()===nm0.toLowerCase()),cat=mc?mc[0]:'Jiný díl',name=mc?mc[0]:nm0,date=val('p_date'),odo=num(val('p_odo')),lk=num(val('p_lkm')),lm=num(val('p_lmo')),pr=num(val('p_price'));
+      if(!name)return 'Zadej název dílu.';
+      if(!requireDate(date))return 'Zadej datum montáže.';
+      if(isNaN(odo)||(odo!=null&&odo<0))return 'Neplatný stav tachometru.';
+      if(isNaN(lk)||isNaN(lm)||(lk!=null&&lk<0)||(lm!=null&&lm<0))return 'Neplatná životnost.';
+      if(isNaN(pr)||(pr!=null&&pr<0))return 'Neplatná cena.';
+      if(odo!=null){const e=checkOdo(v,date,odo,ex?ex.id:null);if(e)return e;}
+      let tid=val('p_task')||null;
+      if(tid==='__new'){
+        if(!lk&&!lm)return 'Pro nový úkon zadej životnost v km nebo v měsících.';
+        if(lk&&odo==null)return 'Pro úkon podle km zadej tachometr při montáži.';
+        const t={id:uid(),vehicleId:v,name:'Výměna: '+name,intervalKm:lk?Math.round(lk):null,intervalMonths:lm?Math.round(lm):null,lastDate:date,lastOdo:odo!=null?Math.round(odo):null,dueDate:null,dueKm:null,history:[],priority:'normal'};
+        touch(t);db.tasks.push(t);tid=t.id;
+      }
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{cat:cat,name:name,spec:val('p_spec').trim(),date:date,odo:odo!=null?Math.round(odo):null,lifeKm:lk||null,lifeMonths:lm||null,taskId:tid,price:pr,note:val('p_note').trim()});
+      touch(rec);if(!ex)db.parts.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function replacePart(old,date,odo,spec,price,wr,labor,shop,fromTask){
+  old.removedDate=date;old.removedOdo=odo;touch(old);
+  const n={id:uid(),vehicleId:old.vehicleId,cat:old.cat,name:old.name,spec:spec,date:date,odo:odo,lifeKm:old.lifeKm||null,lifeMonths:old.lifeMonths||null,taskId:old.taskId||null,price:price,note:''};
+  touch(n);db.parts.push(n);
+  if(wr){const r={id:uid(),vehicleId:old.vehicleId,title:'Výměna: '+old.name+(spec?' ('+spec+')':''),date:date,odo:odo,parts:price||0,labor:labor||0,shop:shop||'',note:'Z evidence dílů',partId:n.id};touch(r);db.repairs.push(r);}
+  if(!fromTask&&old.taskId){const t=db.tasks.find(x=>x.id===old.taskId&&!x.deleted);if(t&&!t.done){(t.history=t.history||[]).push({date:t.lastDate,odo:t.lastOdo});t.lastDate=date;if(odo!=null)t.lastOdo=odo;touch(t);}}
+}
+function replaceForm(id){
+  const old=db.parts.find(x=>x.id===id),v=old.vehicleId,cur=currentOdo(v),lt=old.taskId?db.tasks.find(x=>x.id===old.taskId&&!x.deleted):null;
+  openSheet('Výměna: '+old.name,
+   '<div class="two"><div><label for="r_date">Datum</label><input id="r_date" type="date" value="'+todayIso()+'"></div>'
+   +'<div><label for="r_odo">Tachometr (km)</label><input id="r_odo" inputmode="numeric" value="'+(cur!=null?cur:'')+'"></div></div>'
+   +'<label for="r_spec">Nový díl: značka / typ</label><input id="r_spec" value="'+esc(old.spec||'')+'">'
+   +'<label style="display:flex;gap:8px;align-items:center;margin-top:12px;font-size:15px;color:var(--ink)"><input type="checkbox" id="r_rep"> Zapsat i do Servisu (s cenou)</label>'
+   +'<div class="two"><div><label for="r_price">Cena dílu (Kč)</label><input id="r_price" inputmode="decimal"></div><div id="r_lb"><label for="r_labor">Práce (Kč)</label><input id="r_labor" inputmode="decimal"></div></div>'
+   +'<div id="r_sb"><label for="r_shop">Dílna</label><input id="r_shop"></div>'
+   +'<p class="sub">Servis nech nezaškrtnutý, pokud máš nákup nebo práci zapsanou v Servisu zvlášť. Cena u dílu je pak jen informativní.</p>'+(lt?'<p class="sub">Propojený úkon „'+esc(lt.name)+'" se označí jako provedený.</p>':''),{
+    saveLabel:'Vyměnit',
+    after(){const sy=()=>{const o=$('#r_rep').checked;$('#r_lb').style.display=o?'':'none';$('#r_sb').style.display=o?'':'none';};$('#r_rep').onchange=sy;sy();},
+    onSave(){
+      const date=val('r_date'),odo=num(val('r_odo')),pr=num(val('r_price')),lb=num(val('r_labor'));
+      if(!requireDate(date))return 'Zadej datum.';
+      if(date<old.date)return 'Výměna nemůže být dřív než montáž ('+fdate(old.date)+').';
+      if(isNaN(odo)||(odo!=null&&odo<0))return 'Neplatný stav tachometru.';
+      if(odo!=null&&old.odo!=null&&odo<old.odo)return 'Tachometr je nižší než při montáži ('+nf(old.odo)+' km).';
+      if(isNaN(pr)||isNaN(lb)||(pr!=null&&pr<0)||(lb!=null&&lb<0))return 'Neplatná cena.';
+      if(odo!=null){const e=checkOdo(v,date,odo,null);if(e)return e;}
+      replacePart(old,date,odo!=null?Math.round(odo):null,val('r_spec').trim(),pr,$('#r_rep').checked,lb,val('r_shop').trim(),false);persist();
+    }
+  });
+}
+function viewParts(v){
+  const cur=currentOdo(v),all=live('parts',v),act=all.filter(x=>!x.removedDate),old=all.filter(x=>x.removedDate);
+  const rk={late:0,soon:1,ok:2},ord=PART_CATS.map(c=>c[0]);
+  const rows=act.map(x=>({x:x,i:partInfo(x,cur)})).sort((a,b)=>((a.i.status?rk[a.i.status]:3)-(b.i.status?rk[b.i.status]:3))||(ord.indexOf(a.x.cat)-ord.indexOf(b.x.cat)));
+  let h='<div class="actions"><button class="btn primary" data-act="new-part">+ Nový díl</button></div>';
+  if(!rows.length)h+='<div class="empty">Zatím žádné díly. Přidej třeba přední destičky, autobaterii nebo motorový olej, kdy se naposledy měnily.</div>';
+  else h+='<div class="list">'+rows.map(o=>{const x=o.x,i=o.i,LF=partLife(x),timeMode=!LF.km&&LF.mo||x.odo==null;
+    const main=timeMode?'v autě '+partAge(i.days):(i.km!=null?'ujeto '+nf(i.km)+' km':'v autě '+partAge(i.days));
+    const sec=timeMode?(i.km!=null?nf(i.km)+' km':''):'v autě '+partAge(i.days);
+    let st='';if(i.status){const l=[];if(i.leftKm!=null)l.push(i.leftKm<0?'přes limit o '+nf(-i.leftKm)+' km':'zbývá '+nf(i.leftKm)+' km');if(i.leftDays!=null)l.push(i.leftDays<0?'přes životnost o '+partAge(-i.leftDays):'zbývá '+partAge(i.leftDays));st='<span class="chip '+i.status+'">'+l.join(' · ')+'</span>';}
+    const lt=x.taskId?db.tasks.find(t=>t.id===x.taskId&&!t.deleted):null;
+    return '<div class="card" style="margin:0 0 8px"><button class="row" style="border:0;padding:0" data-act="edit-part" data-id="'+x.id+'"><div class="r1"><b>'+esc(x.name)+'</b><span>'+main+'</span></div>'
+      +'<div class="r2">'+(x.spec?esc(x.spec)+' · ':'')+'od '+fdate(x.date)+(x.odo!=null?' ('+nf(x.odo)+' km)':'')+(sec?' · '+sec:'')+(lt?' · 🔗 '+esc(lt.name):'')+'</div>'
+      +(st?'<div class="r2" style="margin-top:6px">'+st+'</div>':'')+'</button>'
+      +'<div class="actions" style="margin:10px 0 0"><button class="btn" data-act="replace-part" data-id="'+x.id+'">↻ Vyměnit</button></div></div>';}).join('')+'</div>';
+  if(old.length){
+    h+='<h2>Historie výměn</h2><div class="list">'+old.sort((a,b)=>b.removedDate.localeCompare(a.removedDate)).map(x=>{const i=partInfo(x,cur);
+      return '<button class="row" data-act="edit-part" data-id="'+x.id+'"><div class="r1"><b>'+esc(x.name)+'</b><span>'+(i.km!=null?nf(i.km)+' km':partAge(i.days))+'</span></div><div class="r2">'+(x.spec?esc(x.spec)+' · ':'')+fdate(x.date)+' – '+fdate(x.removedDate)+' · '+partAge(i.days)+'</div></button>';}).join('')+'</div>';
+  }
+  h+='<p class="sub" style="margin:10px 2px 0">Název dílu napíšeš libovolně, nabídka je jen pro rychlost. Brzdy, oleje a filtry se sledují podle ujetých km, autobaterie a kapaliny podle doby v autě. „Brzy" se hlásí podle prahů v nastavení.</p>';
+  return h;
+}
+function viewCar(v){
+  const seg='<div class="seg"><button data-csub="card" aria-pressed="'+(carSub==='card')+'">Karta</button><button data-csub="tires" aria-pressed="'+(carSub==='tires')+'">Pneumatiky</button><button data-csub="parts" aria-pressed="'+(carSub==='parts')+'">Díly</button></div>';
+  if(carSub==='tires')return seg+viewTires(v);
+  if(carSub==='parts')return seg+viewParts(v);
+  const car=vehicleById(v),c=car.card||{};
+  let h=seg+'<div class="actions"><button class="btn primary" data-act="edit-card">Upravit kartu</button></div>';
+  h+='<h2>Vozidlo</h2><div class="card"><div class="kv"><span>Název</span><b>'+esc(car.name)+'</b></div>'+(car.plate?'<div class="kv"><span>SPZ</span><b>'+esc(car.plate)+'</b></div>':'')+(car.startOdo!=null?'<div class="kv"><span>Počáteční stav</span><b>'+nf(car.startOdo)+' km</b></div>':'')+'</div>';
+  let any=false;
+  CARD.forEach(g=>{const rows=g[1].filter(f=>c[f[0]]);if(!rows.length)return;any=true;
+    h+='<h2>'+g[0]+'</h2><div class="card">'+rows.map(f=>{const ii=f[2]==='date'?insInfo(c).find(x=>x.key===f[0]):null;return '<div class="kv"><span>'+f[1]+'</span><b>'+(ii?fdate(ii.date)+' <span class="chip '+ii.status+'">'+(ii.days<0?'vypršelo':'za '+nf(ii.days)+' dní')+'</span>':(f[2]==='date'?fdate(c[f[0]]):esc(c[f[0]])))+'</b></div>';}).join('')+'</div>';});
+  if(!any)h+='<div class="empty" style="margin-top:10px">Klepni na Upravit kartu a doplň VIN, motor, pneumatiky, oleje…</div>';
+  return h;
+}
+function viewTires(v){
+  const tires=live('tires',v),st=tireKm(v);
+  let h='<div class="actions"><button class="btn primary" data-act="new-tire">+ Nová sada</button></div>';
+  if(!tires.length)return h+'<div class="empty">Přidej letní a zimní sadu. Evidence ukáže stáří z DOT, dezén a najeté km.</div>';
+  const order={zimní:0,letní:1,celoroční:2};
+  h+='<div class="list">'+tires.sort((a,b)=>(st.mounted.indexOf(a.id)>=0?-1:0)-(st.mounted.indexOf(b.id)>=0?-1:0)||(order[a.season]-order[b.season])).map(t=>{
+    const mounted=st.mounted.indexOf(t.id)>=0,total=(t.kmBefore||0)+(st.km[t.id]||0),age=dotAge(t.dot),lt=lastTread(t);
+    const winter=t.season!=='letní',lim=winter?[4,5]:[1.6,3];
+    const ageSt=age==null?null:(age>=10?'late':(age>=6?'soon':'ok')),trSt=lt?(lt.mm<lim[0]?'late':(lt.mm<lim[1]?'soon':'ok')):null;
+    const icon={letní:'☀',zimní:'❄',celoroční:'⛅'}[t.season]||'';
+    return '<div class="card"><button class="row" style="border:0;padding:0" data-act="edit-tire" data-id="'+t.id+'"><div class="r1"><b>'+icon+' '+esc(tireName(t))+'</b>'+(mounted?'<span class="chip ok">Nasazeno</span>':'')+'</div>'
+      +'<div class="r2">'+esc(t.season)+(t.rims?' · '+esc(t.rims):'')+' · najeto '+nf(total)+' km'+(t.storage?' · uloženo: '+esc(t.storage):'')+'</div>'
+      +'<div class="r2" style="margin-top:6px">'+(age!=null?'<span class="chip '+ageSt+'">DOT '+esc(t.dot)+' · '+nf(age,1)+' r.</span> ':(t.dot?'<span class="chip soon">DOT '+esc(t.dot)+'?</span> ':''))+(lt?'<span class="chip '+trSt+'">dezén '+nf(lt.mm,1)+' mm</span>':'')+'</div></button>'
+      +'<div class="actions" style="margin:10px 0 0"><button class="btn" role="checkbox" aria-checked="'+mounted+'" data-act="'+(mounted?'unmount-tire':'mount-tire')+'" data-id="'+t.id+'">'+(mounted?'☑':'☐')+' Nasazeno</button>'+'<button class="btn" data-act="tread-tire" data-id="'+t.id+'">Změřit dezén</button></div></div>';}).join('')+'</div>';
+  const ev=st.events.slice().reverse();
+  if(ev.length)h+='<h2>Historie nasazení</h2><div class="list">'+ev.map(e=>{const t=db.tires.find(x=>x.id===e.tireId);return '<button class="row" data-act="edit-mount" data-id="'+e.id+'" data-tire="'+e.tireId+'"><div class="r1"><b>'+(e.type==='off'?'⏏ Sundáno: ':'⤓ Nasazeno: ')+esc(tireName(t))+'</b><span>'+nf(e.odo)+' km</span></div><div class="r2">'+fdate(e.date)+' · '+esc(t?t.season:'')+'</div></button>';}).join('')+'</div>';
+  h+='<p class="sub" style="margin:10px 2px">Stáří: do 6 let v pořádku, 6–9 let zvaž výměnu, od 10 let po termínu. Dezén (orientačně): letní od 1,6 mm, zimní a celoroční od 4 mm.</p>';
+  return h;
+}
+const TABS=[['home','Přehled'],['fuel','Tankování'],['service','Servis'],['car','Auto'],['stats','Statistiky']];
+function render(){
+  const sel=$('#veh'),vs=db.vehicles.filter(v=>!v.deleted),v=vid();
+  sel.innerHTML=vs.length?vs.map(x=>'<option value="'+x.id+'"'+(x.id===v?' selected':'')+'>'+esc(x.name+(x.plate?' · '+x.plate:''))+'</option>').join(''):'<option>Žádné auto</option>';
+  $('#nav').innerHTML=TABS.map(t=>'<button data-tab="'+t[0]+'"'+(t[0]===tab?' aria-current="page"':'')+'>'+t[1]+'</button>').join('');
+  let h=(loginNeeded?'<div class="banner">Přihlášení k '+pname()+' vypršelo, záloha čeká. <button class="btn" data-act="cloud-login">Přihlásit</button></div>':'')+(offer?'<div class="banner">V tomto zařízení nejsou žádná data, ale v záloze ('+pname()+') je '+offer+(offer===1?' auto':(offer<5?' auta':' aut'))+'. <button class="btn" data-act="restore-offer">Obnovit ze zálohy</button></div>':'');
+  h+=storageOk?'':'<div class="banner">Prohlížeč nepovoluje ukládání, data se po zavření ztratí. Exportuj je v Nastavení.</div>';
+  if(!v)h+=noVehicle();
+  else h+=({home:viewHome,fuel:viewFuelTab,service:viewTasks,tasks:viewTasks,stats:viewStats,car:viewCar})[tab](v);
+  $('#main').innerHTML=h;
+}
+document.addEventListener('click',e=>{
+  const sb=e.target.closest('[data-sub]');if(sb){tasksSub=sb.dataset.sub;render();return;}
+  const fb=e.target.closest('[data-fsub]');if(fb){fuelSub=fb.dataset.fsub;render();return;}
+  const cb=e.target.closest('[data-csub]');if(cb){carSub=cb.dataset.csub;render();return;}
+  if(helpMode){const ht=e.target.closest('[data-tile]');if(ht){e.preventDefault();e.stopPropagation();helpMode=false;render();tileHelp(ht.dataset.tile);return;}}
+  const ab=e.target.closest('[data-agg]');if(ab){statAgg=ab.dataset.agg;render();return;}
+  const mb=e.target.closest('[data-metric]');if(mb){statMetric=mb.dataset.metric;render();return;}
+  const pt=e.target.closest('[data-pt]');if(pt&&lcInfo){const q=lcInfo.pts[+pt.dataset.pt],r=$('#lc_read');if(r)r.innerHTML='<b>'+(lcMonthly?monthLabel(q.date.slice(0,7)):fdate(q.date))+'</b>: '+nf(q.v,lcInfo.d)+' '+esc(lcInfo.unit)+(q.n?' (z '+q.n+' hodnot)':'');return;}
+  const tb=e.target.closest('[data-tab]');if(tb){tab=tb.dataset.tab;render();window.scrollTo(0,0);return;}
+  const a=e.target.closest('[data-act]');if(!a)return;
+  const id=a.dataset.id,act=a.dataset.act;
+  const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
+    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':tilesSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
+    'export':exportSheet,backup:()=>{backupNow();},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
+  if(m[act])m[act]();
+});
+document.addEventListener('change',e=>{if(e.target.id==='p_year'){pYear=e.target.value;pMonth='';render();}else if(e.target.id==='p_month'){pMonth=e.target.value;render();}});
+$('#veh').onchange=e=>{db.activeVehicle=e.target.value;persistLocal();render();};
+/* jednorázové opravy dat (idempotentní, podle id záznamů) */
+const ODO_FIX={"f6df1cf5-408a-5633-94bf-79a734b61e46": 189430, "498d8b9f-422f-5835-8f82-6d09f063913b": 189788, "9d315db7-0cb0-5ac1-bdc4-bf9bbdbee311": 190193, "543d6caf-483f-563a-b5ac-fb81284c60a7": 190197, "ad904c66-fae6-5ee7-a1b9-a69d11936103": 190700, "5814b562-4b3e-585d-b226-87ebd9f19f66": 190700, "28009181-4221-5838-a83a-27b9f0edfd75": 190450, "1a0a10d7-f9a8-5f03-91c3-d4a601d4b3bf": 191200};
+const ODO_FIX2={"004a1e28-c304-5cee-b8ac-3d1c14efe6d9": 106241, "0f7a1f95-975a-5e4c-b07c-9adced7b1172": 107714};
+const CARD_REG={
+ '2cea01d5-cd17-5130-a440-79625a7483ba':{year:'2021',engType:'3,6L V6',power:'220',displ:'3604',fuel:'Benzín (BA)',color:'Modrá',body:'Osobní automobil, kombi (M1G)',reg1:'2021-01-01',regCz:'2024-10-17',stkTo:'2028-09-30',emis:'Euro 6',seats:'7',dims:'5110 × 1924 × 1831',wheelbase:'3043',track:'1623 / 1628',weightOp:'2480',weightMax:'2949',axle:'1452 / 1770',trailerB:'2812',trailerU:'750',train:'5262',tow:'Třída A50-X',maxSpeed:'190',tires:'265/60 R18 110T',rims:'8J × 18',tiresAlt:'265/60 R20 (ráfky 8J × 20)',note:'Dojezdové kolo T175/90D18 111M. Dovoz z USA, v ČR schváleno 16. 10. 2024. Světla a pásy nejsou homologovány dle EHK/OSN (výjimky dle vyhlášky 341/2014 Sb.).'},
+ '652763f9-2795-542f-b092-967c695a04b8':{variant:'GR Wagon SE+',year:'2000',engType:'306D1',power:'142',displ:'2953',fuel:'Nafta (NM)',color:'Zelená',body:'Osobní automobil, kombi 5dv.',reg1:'2000-01-02',regCz:'2000-01-02',stkTo:'2028-06-13',emis:'Euro 2',seats:'7',dims:'5300 × 2200 × 2300',wheelbase:'2970',weightOp:'2600',weightMax:'3500',axle:'1500 / 1800',trailerB:'3500',trailerU:'750',train:'7000',tow:'Třída A (Nissan KE500-VB000, svislá síla až 140 kg)',maxSpeed:'160',tires:'265/70 R16 112S',rims:'8JJ × 16 ET10',tiresAlt:'235/80 R16 109S (ráfky 6JJ × 16); 35×12,5 R15 113Q (10J × 15 ET-43); 37×12,5 R15 113Q (10J × 15 ET-50); 35×12,5 R16; 38,5×12,5 R16; 35×12,5 R17 (10J × 16); 37×12,5 R17 (10J × 17 ET-40)',note:'Zapsané úpravy: off-road podvozek (vpředu Dobinson, vzadu Outback 4WD), řízení Tough Dog, pevnostní nárazníky s přípravou pro naviják, naviják, šnorchl, ochranné rámy a kryty, pevnostní prahy a nášlapy, rozšiřující lemy, zvýšení podvozku o 6", led bar, sportovní výfuk. ZTP č. 3916-04-02 schváleno 17. 3. 2000.'}};
+const PRIV={};
+function applyPatches(){
+  db.patches=db.patches||[];
+  const done=k=>db.patches.indexOf(k)>=0,mark=k=>db.patches.push(k);
+  if(!done('p5-durango-repair-odo')){db.repairs.forEach(r=>{if(!r.deleted&&r.odo==null&&ODO_FIX2[r.id]!=null){r.odo=ODO_FIX2[r.id];touch(r);}});mark('p5-durango-repair-odo');}
+  if(!done('p4-patrol-repair-odo')){db.repairs.forEach(r=>{if(!r.deleted&&r.odo==null&&ODO_FIX[r.id]!=null){r.odo=ODO_FIX[r.id];touch(r);}});mark('p4-patrol-repair-odo');}
+  if(!done('p6-card-defaults')){
+    const C={'2cea01d5-cd17-5130-a440-79625a7483ba':{make:'Dodge',model:'Durango AWD',tank:'93,1',tpCons:'město 12,4 · 90 km/h 9,1 · 120 km/h 11,2 · průměr 14,1'},
+             '652763f9-2795-542f-b092-967c695a04b8':{make:'Nissan',model:'Patrol',tank:'98',tpCons:'město 14,3 · 90 km/h 8,8 · průměr 10,8'}};
+    db.vehicles.forEach(v=>{const d=C[v.id];if(!d||v.deleted)return;v.card=v.card||{};Object.keys(d).forEach(k=>{if(!v.card[k])v.card[k]=d[k];});touch(v);});
+    mark('p6-card-defaults');
+  }
+  if(!done('p8-card-register')){
+    db.vehicles.forEach(v=>{if(!CARD_REG[v.id]||v.deleted)return;const d=Object.assign({},CARD_REG[v.id],PRIV[v.id]);v.card=v.card||{};Object.keys(d).forEach(k=>{if(!v.card[k])v.card[k]=d[k];});touch(v);});
+    mark('p8-card-register');
+  }
+  if(!done('p9-stk-register')){
+    const L={'2cea01d5-cd17-5130-a440-79625a7483ba':'2026-09-30','652763f9-2795-542f-b092-967c695a04b8':'2026-06-13'};
+    db.tasks.forEach(t=>{const d=L[t.vehicleId];if(!d||t.deleted||t.done||!/^(STK|Měření emisí)$/.test(t.name))return;
+      if(!t.lastDate||t.lastDate<d){if(t.lastDate)(t.history=t.history||[]).push({date:t.lastDate,odo:t.lastOdo});t.lastDate=d;touch(t);}});
+    mark('p9-stk-register');
+  }
+}
+/* ---------- záloha do cloudu: OneDrive (Graph, PKCE) a Google Drive (appDataFolder) ---------- */
+const CFG=Object.assign({clientId:'',tenant:'common',googleClientId:''},window.BADCARS_CONFIG||{});
+const REDIRECT=location.origin+location.pathname.replace(/index\.html$/,'');
+const CUR_KEY='badcars.cloud',PEND_KEY='badcars.auth.pending',LAST_KEY='badcars.lastBackup',FILE_KEY='badcars.lastFileBackup',WAS_KEY='badcars.cloud.was';
+let cloud=null,syncSt='local',pushT=null,pushing=false,again=false,offer=0,lastPushed='',odMsg='',loginNeeded=false;
+const lsGet=k=>{try{return localStorage.getItem(k);}catch(e){return null;}};
+const lsSet=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+const lsDel=k=>{try{localStorage.removeItem(k);}catch(e){}};
+const withTimeout=(p,ms)=>Promise.race([p,new Promise((_,r)=>setTimeout(()=>r(new Error('timeout')),ms))]);
+const rand=n=>{const a=new Uint8Array(n);crypto.getRandomValues(a);return Array.from(a,x=>('0'+x.toString(16)).slice(-2)).join('');};
+async function s256(s){const d=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(s));return btoa(String.fromCharCode.apply(null,new Uint8Array(d))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
+const authErr=()=>{const e=new Error('auth');e.auth=true;return e;};
+const tokKey=p=>'badcars.tok.'+p;
+function getTok(p){try{return JSON.parse(lsGet(tokKey(p)));}catch(e){return null;}}
+function setTok(p,t){lsSet(tokKey(p),JSON.stringify(t));}
+/* migrace ze staré verze (jen OneDrive) */
+(()=>{const o=lsGet('badcars.od.token');if(o&&!lsGet(tokKey('onedrive'))){lsSet(tokKey('onedrive'),o);lsSet(CUR_KEY,'onedrive');}lsDel('badcars.od.token');if(lsGet('badcars.od.was')){lsSet(WAS_KEY,'onedrive');lsDel('badcars.od.was');}})();
+const OD_AUTH='https://login.microsoftonline.com/'+CFG.tenant+'/oauth2/v2.0/',OD_SCOPE='Files.ReadWrite.AppFolder offline_access';
+const OD_FILE='https://graph.microsoft.com/v1.0/me/drive/special/approot:/badcars-backup.json';
+const GD_SCOPE='https://www.googleapis.com/auth/drive.appdata',GD_API='https://www.googleapis.com/drive/v3/files',GD_UP='https://www.googleapis.com/upload/drive/v3/files';
+async function odTokenReq(params){
+  const r=await withTimeout(fetch(OD_AUTH+'token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(params).toString()}),15000);
+  const j=await r.json();if(!r.ok||!j.access_token)throw new Error(j.error_description||j.error||'token');
+  const old=getTok('onedrive')||{};setTok('onedrive',{access:j.access_token,refresh:j.refresh_token||old.refresh,exp:Date.now()+(j.expires_in||3600)*1000});
+}
+const PROV={
+  onedrive:{name:'OneDrive',where:'složka Apps/BadCars',configured:()=>!!CFG.clientId,
+    async login(){const ver=rand(32),st=rand(8);lsSet(PEND_KEY,JSON.stringify({p:'onedrive',ver:ver,st:st}));
+      location.href=OD_AUTH+'authorize?'+new URLSearchParams({client_id:CFG.clientId,response_type:'code',redirect_uri:REDIRECT,response_mode:'query',scope:OD_SCOPE,state:st,code_challenge:await s256(ver),code_challenge_method:'S256',prompt:'select_account'}).toString();},
+    async finish(pend,q){if(q.has('error'))throw new Error(q.get('error_description')||q.get('error'));if(!q.has('code'))return false;
+      if(pend.st!==q.get('state'))throw new Error('neplatný stav');
+      await odTokenReq({client_id:CFG.clientId,grant_type:'authorization_code',code:q.get('code'),redirect_uri:REDIRECT,code_verifier:pend.ver,scope:OD_SCOPE});return true;},
+    async token(){const t=getTok('onedrive');if(!t)return null;if(t.exp>Date.now()+60000)return t.access;if(!t.refresh)return null;
+      try{await odTokenReq({client_id:CFG.clientId,grant_type:'refresh_token',refresh_token:t.refresh,scope:OD_SCOPE});return getTok('onedrive').access;}catch(e){lsDel(tokKey('onedrive'));return null;}},
+    async read(){const m=await cfetch('onedrive',OD_FILE);if(m.status===404)return {data:null,etag:null};if(!m.ok)throw new Error('OneDrive '+m.status);
+      const meta=await m.json(),c=await cfetch('onedrive',OD_FILE+':/content');if(!c.ok)throw new Error('OneDrive '+c.status);return {data:JSON.parse(await c.text()),etag:meta.eTag||null};},
+    async write(text,etag){const h={'Content-Type':'application/json'};if(etag)h['If-Match']=etag;
+      const r=await cfetch('onedrive',OD_FILE+':/content?@microsoft.graph.conflictBehavior=replace',{method:'PUT',headers:h,body:text});
+      if(r.status===412){const e=new Error('conflict');e.conflict=true;throw e;}if(!r.ok)throw new Error('OneDrive '+r.status);}
+  },
+  gdrive:{name:'Google Drive',where:'skrytá data aplikace na Disku Google',configured:()=>!!CFG.googleClientId,
+    async login(){const st=rand(8);lsSet(PEND_KEY,JSON.stringify({p:'gdrive',st:st}));
+      location.href='https://accounts.google.com/o/oauth2/v2/auth?'+new URLSearchParams({client_id:CFG.googleClientId,redirect_uri:REDIRECT,response_type:'token',scope:GD_SCOPE,state:st,include_granted_scopes:'true'}).toString();},
+    async finish(pend,q,h){if(h.has('error'))throw new Error(h.get('error'));if(!h.has('access_token'))return false;
+      if(pend.st!==h.get('state'))throw new Error('neplatný stav');
+      setTok('gdrive',{access:h.get('access_token'),exp:Date.now()+(+h.get('expires_in')||3600)*1000});return true;},
+    async token(){const t=getTok('gdrive');return t&&t.exp>Date.now()+60000?t.access:null;},
+    async fileMeta(){const r=await cfetch('gdrive',GD_API+'?'+new URLSearchParams({spaces:'appDataFolder',q:"name='badcars-backup.json' and trashed=false",fields:'files(id,version)',pageSize:'10'}));
+      if(!r.ok)throw new Error('Google Drive '+r.status);const j=await r.json();return (j.files||[])[0]||null;},
+    async read(){const f=await this.fileMeta();if(!f)return {data:null,etag:null};const c=await cfetch('gdrive',GD_API+'/'+f.id+'?alt=media');
+      if(!c.ok)throw new Error('Google Drive '+c.status);return {data:JSON.parse(await c.text()),etag:f.id+'@'+f.version};},
+    async write(text,etag){
+      if(etag){const id=etag.split('@')[0],f=await this.fileMeta();if(!f||f.id+'@'+f.version!==etag){const e=new Error('conflict');e.conflict=true;throw e;}
+        const r=await cfetch('gdrive',GD_UP+'/'+id+'?uploadType=media',{method:'PATCH',headers:{'Content-Type':'application/json'},body:text});if(!r.ok)throw new Error('Google Drive '+r.status);return;}
+      if(await this.fileMeta()){const e=new Error('conflict');e.conflict=true;throw e;}
+      const bd='bc'+rand(8),body='--'+bd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify({name:'badcars-backup.json',parents:['appDataFolder']})+'\r\n--'+bd+'\r\nContent-Type: application/json\r\n\r\n'+text+'\r\n--'+bd+'--';
+      const r=await cfetch('gdrive',GD_UP+'?uploadType=multipart',{method:'POST',headers:{'Content-Type':'multipart/related; boundary='+bd},body:body});if(!r.ok)throw new Error('Google Drive '+r.status);}
+  }
+};
+const provList=()=>Object.keys(PROV).filter(k=>PROV[k].configured());
+const curProv=()=>{const p=lsGet(CUR_KEY);return p&&PROV[p]&&PROV[p].configured()?p:null;};
+const pname=()=>{const p=curProv()||lsGet(WAS_KEY);return p&&PROV[p]?PROV[p].name:'cloud';};
+async function cfetch(p,url,opt){
+  const tok=await PROV[p].token();if(!tok)throw authErr();
+  opt=opt||{};opt.headers=Object.assign({Authorization:'Bearer '+tok},opt.headers||{});
+  const r=await withTimeout(fetch(url,opt),20000);
+  if(r.status===401){lsDel(tokKey(p));throw authErr();}
+  return r;
+}
+const cloudSignedIn=()=>{const p=curProv();return !!(p&&getTok(p));};
+function cloudLogin(p){if(!PROV[p]||!PROV[p].configured())return;const c=curProv();if(c&&c!==p)lsDel(tokKey(c));lsSet(CUR_KEY,p);PROV[p].login();}
+function cloudLogout(){const p=curProv();if(p)lsDel(tokKey(p));lsDel(CUR_KEY);lsDel(WAS_KEY);loginNeeded=false;cloud=null;odMsg='';setSync('local');if(!$('#sheet').className)render();}
+async function handleRedirect(){
+  const q=new URLSearchParams(location.search),h=new URLSearchParams(location.hash.slice(1));
+  if(!q.has('code')&&!q.has('error')&&!h.has('access_token')&&!h.has('error'))return;
+  history.replaceState({},'',REDIRECT);
+  let pend=null;try{pend=JSON.parse(lsGet(PEND_KEY));}catch(e){}lsDel(PEND_KEY);
+  if(!pend||!PROV[pend.p]){odMsg='Přihlášení selhalo, zkus to znovu.';return;}
+  try{if(await PROV[pend.p].finish(pend,q,h)){lsSet(CUR_KEY,pend.p);lsSet(WAS_KEY,pend.p);loginNeeded=false;}}
+  catch(e){odMsg='Přihlášení k '+PROV[pend.p].name+' selhalo: '+e.message;}
+}
+const lastBackup=()=>lsGet(LAST_KEY)||'';
+const SYNC_TXT={
+  off:'Cloudová záloha není nastavená (config.js). Data jsou jen v tomto zařízení, zálohuj je ručně do souboru.',
+  local:'Nejsi přihlášený k žádnému cloudu. Data jsou jen v tomto zařízení.',
+  ok:'Lokální data se průběžně zálohují. Záloha se nikdy nepřepisuje starším stavem, jen doplňuje.',
+  busy:'Zálohuji…',
+  err:'Poslední záloha selhala, data zůstávají v zařízení. Zkus to znovu nebo se znovu přihlas.'};
+function infoText(st){const p=curProv();return (provList().length?(st==='ok'&&p?'Záloha: '+PROV[p].name+' ('+PROV[p].where+'). ':'')+SYNC_TXT[st]:SYNC_TXT.off)+(st==='ok'&&lastBackup()?' Poslední záloha: '+new Date(+lastBackup()).toLocaleString('cs-CZ')+'.':'')+(odMsg?' '+odMsg:'');}
+function setSync(st){syncSt=st;const e=$('#sync');if(e){e.textContent=({local:'⚠ jen v zařízení',ok:'☁ '+pname(),busy:'⟳ zálohuji…',err:'⚠ záloha selhala'})[st];e.className='sync '+st;}const i=$('#syncinfo');if(i)i.textContent=infoText(st);}
+const byId=(a,b)=>a.id<b.id?-1:a.id>b.id?1:0;
+function unionList(a,b){const m=new Map((a||[]).map(x=>[x.id,x]));(b||[]).forEach(x=>{if(!x||!x.id)return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0))m.set(x.id,x);});return Array.from(m.values()).sort(byId);}
+const KEYS=['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'];
+function localExport(){const o={app:'badcars',v:1};KEYS.forEach(k=>{o[k]=(db[k]||[]).slice().sort(byId);});o.settings=db.settings||null;return o;}
+function unionDb(r,l){const o={app:'badcars',v:1};KEYS.forEach(k=>{o[k]=unionList(r&&r[k],l[k]);});o.settings=newerSettings(r&&r.settings,l.settings)||null;return o;}
+async function pushOnce(){
+  const P=PROV[curProv()],rem=await P.read(),merged=unionDb(rem.data,localExport()),text=JSON.stringify(merged);
+  if(rem.data&&JSON.stringify(unionDb(null,rem.data))===text)return;
+  if(text===lastPushed)return;
+  await P.write(text,rem.etag);lastPushed=text;
+}
+function authLost(){cloud=null;loginNeeded=true;odMsg='Přihlášení k '+pname()+' vypršelo, přihlas se znovu.';setSync('local');if(!$('#sheet').className)render();}
+async function pushAll(){
+  if(!cloud||!db.vehicles.length)return;
+  if(pushing){again=true;return;}
+  pushing=true;setSync('busy');
+  try{do{again=false;for(let i=0;i<3;i++){try{await pushOnce();break;}catch(e){if(e.conflict&&i<2)continue;throw e;}}}while(again);
+    lsSet(LAST_KEY,String(Date.now()));setSync('ok');}
+  catch(e){if(e.auth)authLost();else{odMsg=e.message;setSync('err');}}
+  pushing=false;
+}
+function schedulePush(){if(!cloud||!db.vehicles.length)return;clearTimeout(pushT);setSync('busy');pushT=setTimeout(pushAll,1500);}
+async function backupNow(){if(!cloud){odMsg=provList().length?'Nejdřív se přihlas ke cloudu.':'';setSync('local');return;}clearTimeout(pushT);await pushAll();}
+async function restoreNow(){
+  if(!cloud){odMsg=provList().length?'Nejdřív se přihlas ke cloudu.':'';setSync('local');return null;}
+  setSync('busy');
+  try{const rem=await PROV[curProv()].read();if(!rem.data){offer=0;setSync('ok');return 0;}
+    const n=mergeDb(rem.data);offer=0;persistLocal();if(!$('#sheet').className)render();await pushAll();return n;}
+  catch(e){if(e.auth)authLost();else setSync('err');return null;}
+}
+/* ruční záloha do souboru */
+const lastFile=()=>lsGet(FILE_KEY)||'';
+async function fileBackup(){
+  const text=JSON.stringify(localExport(),null,1),name='badcars-zaloha-'+todayIso()+'.json';
+  try{const f=new File([text],name,{type:'application/json'});
+    if(navigator.canShare&&navigator.canShare({files:[f]})){await navigator.share({files:[f],title:'Záloha BadCars'});lsSet(FILE_KEY,String(Date.now()));return 'Záloha předána ke sdílení. Vyber např. Uložit do Souborů, iCloud nebo Disk Google.';}}
+  catch(e){if(e&&e.name==='AbortError')return 'Sdílení zrušeno.';}
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();lsSet(FILE_KEY,String(Date.now()));return 'Soubor '+name+' se stahuje.';}
+  catch(e){return 'Uložení se nepovedlo: '+e.message;}
+}
+function cloudPanel(){
+  const L=provList(),p=curProv(),on=cloudSignedIn();
+  if(!L.length)return '<p class="sub">V souboru config.js není nastavené žádné úložiště (OneDrive ani Google Drive).</p>';
+  if(on)return '<div class="kv"><span>Připojeno</span><b>'+PROV[p].name+'</b></div><div class="actions"><button type="button" class="btn" data-act="backup">Zálohovat teď</button><button type="button" class="btn" data-act="restore">Obnovit ze zálohy</button></div><div class="actions"><button type="button" class="btn" data-act="cloud-logout">Odpojit '+PROV[p].name+'</button></div>';
+  return '<div class="actions">'+L.map(k=>'<button type="button" class="btn" data-act="cloud-login" data-p="'+k+'">Připojit '+PROV[k].name+'</button>').join('')+'</div>'+(L.length>1?'<p class="sub" style="margin:0">Zálohovat jde vždy do jednoho úložiště. Přepnutím na jiné se to původní odpojí (záloha v něm zůstane).</p>':'');
+}
+const confirmLogout=()=>{try{return confirm('Odpojit '+pname()+'? Data v zařízení i záloha v cloudu zůstanou.');}catch(e){return true;}};
+function fileSection(){const d=lastFile();return '<h2>Ruční záloha do souboru</h2><p class="sub" style="margin:0">Funguje bez registrace. Na telefonu se otevře Sdílet, kde zvolíš Uložit do Souborů, iCloud, Disk Google nebo e-mail. Obnovení ze souboru data sloučí, nic nepřepíše.</p><div class="actions"><button type="button" class="btn" data-act="file-backup">Uložit zálohu do souboru</button><button type="button" class="btn" data-act="file-restore">Obnovit ze souboru</button></div><p class="sub" id="fileinfo">'+(d?'Poslední ruční záloha: '+new Date(+d).toLocaleString('cs-CZ')+'.':'Ruční zálohu jsi v tomto zařízení zatím neuložil.')+'</p>';}
+async function startup(){
+  render();
+  try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
+  try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');}catch(e){}
+  if(!provList().length){setSync('local');return;}
+  await handleRedirect();
+  if(!cloudSignedIn()){loginNeeded=!!(lsGet(WAS_KEY)&&PROV[lsGet(WAS_KEY)]&&PROV[lsGet(WAS_KEY)].configured());setSync('local');render();return;}
+  cloud=true;setSync('busy');
+  try{const rem=await PROV[curProv()].read();
+    if(!db.vehicles.some(v=>!v.deleted)){offer=rem.data?(rem.data.vehicles||[]).filter(v=>!v.deleted).length:0;render();setSync('ok');}
+    else{if(rem.data&&adoptSettings(rem.data.settings))render();await pushAll();}
+  }catch(e){if(e.auth)authLost();else{odMsg=e.message;setSync('err');}}
+}
+startup();
+</script>
+</body>
+</html>
