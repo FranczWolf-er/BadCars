@@ -1210,7 +1210,7 @@ function render(){
   const sel=$('#veh'),vs=db.vehicles.filter(v=>!v.deleted),v=vid();
   sel.innerHTML=vs.length?vs.map(x=>'<option value="'+x.id+'"'+(x.id===v?' selected':'')+'>'+esc(x.name+(x.plate?' · '+x.plate:''))+'</option>').join(''):'<option>Žádné auto</option>';
   $('#nav').innerHTML=TABS.map(t=>'<button data-tab="'+t[0]+'"'+(t[0]===tab?' aria-current="page"':'')+'>'+t[1]+'</button>').join('');
-  let h=(loginNeeded?'<div class="banner">Přihlášení k '+pname()+' vypršelo, záloha čeká. <button class="btn" data-act="cloud-login">Přihlásit</button></div>':'')+(offer?'<div class="banner">V tomto zařízení nejsou žádná data, ale v záloze ('+pname()+') je '+offer+(offer===1?' auto':(offer<5?' auta':' aut'))+'. <button class="btn" data-act="restore-offer">Obnovit ze zálohy</button></div>':'');
+  let h=(updReady?'<div class="banner">Je k dispozici nová verze aplikace. <button class="btn" data-act="app-reload">Obnovit</button></div>':'')+(loginNeeded?'<div class="banner">Přihlášení k '+pname()+' vypršelo, záloha čeká. <button class="btn" data-act="cloud-login">Přihlásit</button></div>':'')+(offer?'<div class="banner">V tomto zařízení nejsou žádná data, ale v záloze ('+pname()+') je '+offer+(offer===1?' auto':(offer<5?' auta':' aut'))+'. <button class="btn" data-act="restore-offer">Obnovit ze zálohy</button></div>':'');
   h+=storageOk?'':'<div class="banner">Prohlížeč nepovoluje ukládání, data se po zavření ztratí. Exportuj je v Nastavení.</div>';
   if(!v)h+=noVehicle();
   else h+=({home:viewHome,fuel:viewFuelTab,service:viewTasks,tasks:viewTasks,stats:viewStats,car:viewCar})[tab](v);
@@ -1229,7 +1229,7 @@ document.addEventListener('click',e=>{
   const id=a.dataset.id,act=a.dataset.act;
   const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
     'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':tilesSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
-    'export':exportSheet,backup:()=>{backupNow();},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
+    'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
 });
 document.addEventListener('change',e=>{if(e.target.id==='p_year'){pYear=e.target.value;pMonth='';render();}else if(e.target.id==='p_month'){pMonth=e.target.value;render();}});
@@ -1393,6 +1393,20 @@ async function fileBackup(){
   try{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([text],{type:'application/json'}));a.download=name;document.body.appendChild(a);a.click();a.remove();lsSet(FILE_KEY,String(Date.now()));return 'Soubor '+name+' se stahuje.';}
   catch(e){return 'Uložení se nepovedlo: '+e.message;}
 }
+let updReady=false;
+function swSetup(){
+  try{if(!('serviceWorker' in navigator))return;
+    const had=!!navigator.serviceWorker.controller;
+    navigator.serviceWorker.register('sw.js').then(reg=>{
+      const watch=w=>{if(!w)return;w.addEventListener('statechange',()=>{if((w.state==='installed'||w.state==='activated')&&had&&!updReady){updReady=true;if(!$('#sheet').className)render();else toast('Je k dispozici nová verze aplikace');}});};
+      if(reg.installing)watch(reg.installing);
+      reg.addEventListener('updatefound',()=>watch(reg.installing));
+      const chk=()=>{try{reg.update();}catch(e){}};
+      document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')chk();});
+      setInterval(chk,30*60*1000);
+    }).catch(()=>{});
+  }catch(e){}
+}
 function cloudPanel(){
   const L=provList(),p=curProv(),on=cloudSignedIn();
   if(!L.length)return '<p class="sub">V souboru config.js není nastavené žádné úložiště (OneDrive ani Google Drive).</p>';
@@ -1404,7 +1418,7 @@ function fileSection(){const d=lastFile();return '<h2>Ruční záloha do souboru
 async function startup(){
   render();
   try{if(navigator.storage&&navigator.storage.persist)navigator.storage.persist();}catch(e){}
-  try{if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');}catch(e){}
+  swSetup();
   if(!provList().length){setSync('local');return;}
   await handleRedirect();
   if(!cloudSignedIn()){loginNeeded=!!(lsGet(WAS_KEY)&&PROV[lsGet(WAS_KEY)]&&PROV[lsGet(WAS_KEY)].configured());setSync('local');render();return;}
