@@ -691,7 +691,7 @@ function settingsSheet(){
   const vs=db.vehicles.filter(v=>!v.deleted);
   openSheet('Nastavení','<h2 style="margin-top:6px">Auta</h2><div class="list">'
    +vs.map(v=>'<button type="button" class="row" data-act="edit-veh" data-id="'+v.id+'"><div class="r1"><b>'+esc(v.name)+'</b><span>'+esc(v.plate||'')+'</span></div></button>').join('')
-   +'</div><div class="actions"><button type="button" class="btn" data-act="new-veh">+ Přidat auto</button></div>'
+   +'</div><div class="actions"><button type="button" class="btn" data-act="new-veh">+ Přidat auto</button>'+(demoIds().length?'<button type="button" class="btn danger" data-act="demo-del">Smazat ukázkové auto</button>':'<button type="button" class="btn" data-act="demo-add">+ Ukázkové auto</button>')+'</div>'+(demoIds().length?'<p class="sub" style="margin:0">Ukázkové auto se nezálohuje do cloudu.</p>':'')
    +'<h2>Záloha do cloudu</h2>'+cloudPanel()+'<p class="sub" id="syncinfo">'+infoText(syncSt)+'</p>'+fileSection()+''
    +'<h2>Upozornění v úkonech</h2><p class="sub" style="margin:0">Úkon je „Brzy", když do termínu zbývá méně než zadaný počet dní, nebo méně než zadané km. Po termínu je od překročení. Platí i pro pojištění.</p>'
    +'<div class="two"><div><label for="s_days">Brzy: dní předem</label><input id="s_days" inputmode="numeric" value="'+cfg().days+'"></div><div><label for="s_pct">Brzy: % intervalu v km</label><input id="s_pct" inputmode="numeric" value="'+cfg().kmPct+'"></div></div>'
@@ -743,8 +743,56 @@ function taskRow(t,cur,daily){
   if(isOneTime(t))parts.unshift('jednorázově');
   return {info:i,t:t,html:'<button class="row" data-act="edit-task" data-id="'+t.id+'"><div class="r1"><b>'+esc(t.name)+(prioOf(t)!=='normal'?'<span class="pri '+prioOf(t)+'">'+(prioOf(t)==='high'?'▲ ':'▽ ')+PRIO[prioOf(t)][0]+'</span>':'')+'</b><span class="chip '+i.status+'">'+sym+lbl+'</span></div><div class="r2">'+(parts.join(' · ')||'—')+'</div></button>'};
 }
+/* ---------- ukázkové auto ---------- */
+const DEMO_NAME='Ukázkové auto';
+const demoIds=()=>db.vehicles.filter(v=>v.demo&&!v.deleted).map(v=>v.id);
+function makeDemo(){
+  const V=uid(),T=todayIso(),addD=(d,n)=>{const x=pd(d);x.setDate(x.getDate()+n);return x.toISOString().slice(0,10);};
+  let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return (seed-1)/2147483646;};
+  const start=addD(T,-560),odo0=152000,now=Date.now(),R=o=>Object.assign(o,{id:o.id||uid(),vehicleId:V,updatedAt:now});
+  db.vehicles.push({id:V,name:DEMO_NAME,plate:'1AB 2345',demo:true,startDate:start,startOdo:odo0,updatedAt:now,
+    card:{make:'Škoda',model:'Octavia Combi',variant:'2.0 TDI Style',year:'2019',fuel:'Nafta (NM)',power:'110',displ:'1968',color:'Šedá',tank:'50',tpCons:'kombinovaná 4,6',tires:'205/55 R16 91V',rims:'6,5J × 16',oil:'5W-30 VW 507.00',oilVol:'4,6',stkTo:addD(T,40),insPov:addD(T,120),insurer:'Ukázková pojišťovna',buyPrice:'420000',buyDate:start,buyOdo:String(odo0),curValue:'330000',note:'Ukázková data – smaž v Nastavení.'}});
+  let d=start,o=odo0;const fu=[];
+  while(d<addD(T,-3)){const gap=6+Math.floor(rnd()*9),km=Math.round(gap*(38+rnd()*30));d=addD(d,gap);if(d>T)break;o+=km;
+    const l=+(km*(5.0+rnd()*1.4)/100).toFixed(2),pr=+(35.5+rnd()*5+(d>addD(T,-60)?4:0)).toFixed(2);
+    fu.push(R({date:d,odo:o,liters:l,total:+(l*pr).toFixed(1),full:false,note:['OMV','Shell','MOL','Orlen'][Math.floor(rnd()*4)]}));}
+  db.fuelings.push.apply(db.fuelings,fu);
+  const at=n=>fu[Math.min(fu.length-1,Math.max(0,Math.round(n*(fu.length-1))))],cur=fu[fu.length-1].odo;
+  const oil=at(0.62),pads=at(0.3),bat=at(0.12),stk=addD(T,-690);
+  db.repairs.push(R({date:bat.date,odo:bat.odo,title:'Autobaterie Varta 70 Ah',parts:2890,labor:300,shop:'Autoservis Novák',note:''}),
+    R({date:pads.date,odo:pads.odo,title:'Přední brzdové destičky + kontrola kotoučů',parts:1650,labor:900,shop:'Autoservis Novák',note:''}),
+    R({date:oil.date,odo:oil.odo,title:'Výměna oleje a filtrů',parts:2400,labor:600,shop:'Autoservis Novák',note:''}),
+    R({date:at(0.85).date,odo:at(0.85).odo,title:'Stěrače',parts:520,labor:0,shop:'',note:''}));
+  const tOil=R({name:'Výměna oleje (motor)',intervalKm:15000,intervalMonths:12,lastDate:oil.date,lastOdo:oil.odo,dueDate:null,dueKm:null,history:[],priority:'high'});
+  const tStk=R({name:'STK',intervalKm:null,intervalMonths:24,lastDate:stk,lastOdo:null,dueDate:null,dueKm:null,history:[],priority:'normal'});
+  const tBrk=R({name:'Brzdová kapalina',intervalKm:null,intervalMonths:24,lastDate:addD(T,-760),lastOdo:null,dueDate:null,dueKm:null,history:[],priority:'high'});
+  const tOne=R({name:'Opravit škrábanec na dveřích',intervalKm:null,intervalMonths:null,lastDate:null,lastOdo:null,dueDate:addD(T,75),dueKm:null,history:[],priority:'low'});
+  db.tasks.push(tOil,tStk,tBrk,tOne);
+  const y=+T.slice(0,4);
+  db.fixed.push(R({name:'Pojištění povinné',year:y-1,amount:5200}),R({name:'Dálniční známka',year:y-1,amount:2300}),R({name:'Pojištění povinné',year:y,amount:5450}),R({name:'Dálniční známka',year:y,amount:2440}));
+  const tS=R({season:'letní',brand:'Michelin',model:'Primacy 4',size:'205/55 R16',dot:'1222',tread:null,kmBefore:8000,rims:'alu 16"',storage:'sklep',note:'',treads:[{date:addD(T,-200),mm:5.5}]}),
+        tW=R({season:'zimní',brand:'Nokian',model:'WR Snowproof',size:'205/55 R16',dot:'3820',tread:null,kmBefore:15000,rims:'ocel 16"',storage:'pneuservis',note:'',treads:[{date:addD(T,-30),mm:4.6}]});
+  db.tires.push(tS,tW);
+  const ev=(t,f,type)=>R({tireId:t.id,date:f.date,odo:f.odo,type:type||'on'});
+  db.tireEvents.push(ev(tW,fu[0]),ev(tS,at(0.22)),ev(tW,at(0.6)),ev(tS,at(0.82)),ev(tW,at(0.97)));
+  db.parts.push(R({cat:'Motorový olej',name:'Motorový olej',spec:'Castrol Edge 5W-30',date:oil.date,odo:oil.odo,lifeKm:null,lifeMonths:null,taskId:tOil.id,price:null,note:''}),
+    R({cat:'Přední brzdové destičky',name:'Přední brzdové destičky',spec:'Brembo',date:pads.date,odo:pads.odo,lifeKm:40000,lifeMonths:null,taskId:null,price:1650,note:''}),
+    R({cat:'Autobaterie',name:'Autobaterie',spec:'Varta Blue 70 Ah',date:bat.date,odo:bat.odo,lifeKm:null,lifeMonths:60,taskId:null,price:2890,note:''}),
+    R({cat:'Stěrače',name:'Stěrače',spec:'Bosch Aerotwin',date:addD(T,-400),odo:null,lifeKm:null,lifeMonths:12,taskId:null,price:520,note:''}));
+  const tr=(f,km,from,to,purpose)=>R({date:f.date,from:from,to:to,purpose:purpose,odoStart:f.odo,odoEnd:f.odo+km,km:km,rate:5.9,cons:4.6,price:44.5,note:''});
+  // jízdy hned po tankování, aby navazoval tachometr
+  [[0.9,'Praha','Brno','Jednání'],[0.95,'Praha','Plzeň','Školení']].forEach(a=>{const i=Math.round(a[0]*(fu.length-1)),f=fu[i],nx=fu[i+1];const km=Math.min(nx?nx.odo-f.odo-5:200,a[2]==='Brno'?410:180);if(km>20)db.trips.push(tr(f,km,a[1],a[2],a[3]));});
+  db.activeVehicle=V;persist();
+}
+function removeDemo(){
+  const ids=demoIds();if(!ids.length)return;
+  ['fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'].forEach(k=>{db[k]=(db[k]||[]).filter(x=>ids.indexOf(x.vehicleId)<0);});
+  db.vehicles=db.vehicles.filter(v=>ids.indexOf(v.id)<0);
+  if(ids.indexOf(db.activeVehicle)>=0){const o=db.vehicles.find(v=>!v.deleted);db.activeVehicle=o?o.id:null;}
+  persist();
+}
 function noVehicle(){
-  return '<div class="empty">Zatím tu není žádné auto.<br><br><button class="btn primary" data-act="new-veh">Přidat první auto</button></div>';
+  return '<div class="empty">Zatím tu není žádné auto.<br><br><button class="btn primary" data-act="new-veh">Přidat první auto</button><br><br><button class="btn" data-act="demo-add">Vyzkoušet s ukázkovým autem</button><p class="sub" style="margin-top:8px">Ukázkové auto má vyplněná tankování, servis, úkony, pneumatiky, díly i jízdy, ať vidíš, co aplikace umí. Smažeš ho jedním klepnutím v Nastavení.</p></div>';
 }
 const TILE_DEFS=[
  ['health','Zdraví auta',(v,D)=>{const H=healthScore(v);return '<div class="card" data-act="health" style="cursor:pointer"><div class="k">Zdraví auta</div><div class="v">'+(H.score!=null?H.score+' <small>/ 100</small>':'–')+'</div><div class="sub"><span class="chip '+H.state+'">'+(H.label||'málo dat')+'</span> detail</div></div>';}],
@@ -883,11 +931,12 @@ function tilesSheet(){
   });
 }
 function viewHome(v){
+  const dm=(vehicleById(v)||{}).demo?'<div class="banner">Prohlížíš ukázkové auto. Klidně zkoušej, nic se nezálohuje. <button class="btn" data-act="demo-del">Smazat ukázku</button></div>':'';
   const cur=currentOdo(v),segs=fuelSegments(v),exact=segs.length>=3,cs=consStats(segs),cost=costStats(v),daily=dailyKm(v);
   const aAll=exact?cs.avg:approxCons(v,0);
   const fuels=live('fuelings',v),L=fuels.reduce((s,f)=>s+f.liters,0),C=sumCost(fuels),all=live('fixed',v).length>0?periodStats(v,''):{};
   const year=String(new Date().getFullYear()),D=homeD={year:year,ps:periodStats(v,year),cur:cur,segs:segs,exact:exact,cs:cs,cost:cost,daily:daily,aAll:aAll,L:L,C:C,all:all,t:tco(v)};
-  let h='<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Tankování</button><button class="btn" data-act="new-repair">🔧 Servis</button><button class="btn" data-act="trip">🧮 Cesta</button></div>';
+  let h=dm+'<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Tankování</button><button class="btn" data-act="new-repair">🔧 Servis</button><button class="btn" data-act="trip">🧮 Cesta</button></div>';
   const ids=tileOrder(v);
   if(helpMode)h+='<div class="helpbar" role="status">Klepni na dlaždici a ukážu, z čeho a jak se počítá. <button class="btn" data-act="help-mode" style="padding:4px 10px;margin-left:6px">Zrušit</button></div>';
   h+=ids.length?'<div class="grid'+(helpMode?' helpon':'')+'">'+ids.map(id=>TILE_DEFS.find(d=>d[0]===id)[2](v,D,tilePer(id)).replace(/^<div /,'<div data-tile="'+id+'" ')).join('')+'</div>':'<div class="empty">Žádné ukazatele. Přidej je přes Upravit ukazatele.</div>';
@@ -1208,7 +1257,7 @@ function viewTires(v){
 const TABS=[['home','Přehled'],['fuel','Tankování'],['service','Servis'],['car','Auto'],['stats','Statistiky']];
 function render(){
   const sel=$('#veh'),vs=db.vehicles.filter(v=>!v.deleted),v=vid();
-  sel.innerHTML=vs.length?vs.map(x=>'<option value="'+x.id+'"'+(x.id===v?' selected':'')+'>'+esc(x.name+(x.plate?' · '+x.plate:''))+'</option>').join(''):'<option>Žádné auto</option>';
+  sel.innerHTML=vs.length?vs.map(x=>'<option value="'+x.id+'"'+(x.id===v?' selected':'')+'>'+esc(x.name+(x.plate?' · '+x.plate:'')+(x.demo?' (ukázka)':''))+'</option>').join(''):'<option>Žádné auto</option>';
   $('#nav').innerHTML=TABS.map(t=>'<button data-tab="'+t[0]+'"'+(t[0]===tab?' aria-current="page"':'')+'>'+t[1]+'</button>').join('');
   let h=backupNag()+(updReady?'<div class="banner">Je k dispozici nová verze aplikace. <button class="btn" data-act="app-reload">Obnovit</button></div>':'')+(loginNeeded?'<div class="banner">Přihlášení k '+pname()+' vypršelo, záloha čeká. <button class="btn" data-act="cloud-login">Přihlásit</button></div>':'')+(offer?'<div class="banner">V tomto zařízení nejsou žádná data, ale v záloze ('+pname()+') je '+offer+(offer===1?' auto':(offer<5?' auta':' aut'))+'. <button class="btn" data-act="restore-offer">Obnovit ze zálohy</button></div>':'');
   h+=storageOk?'':'<div class="banner">Prohlížeč nepovoluje ukládání, data se po zavření ztratí. Exportuj je v Nastavení.</div>';
@@ -1227,7 +1276,7 @@ document.addEventListener('click',e=>{
   const tb=e.target.closest('[data-tab]');if(tb){tab=tb.dataset.tab;render();window.scrollTo(0,0);return;}
   const a=e.target.closest('[data-act]');if(!a)return;
   const id=a.dataset.id,act=a.dataset.act;
-  const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
+  const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'demo-add':()=>{if(!demoIds().length)makeDemo();closeSheet();render();},'demo-del':()=>{let ok=true;try{ok=confirm('Smazat ukázkové auto a všechna jeho data?');}catch(e){}if(ok){removeDemo();closeSheet();render();}},'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
     'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':tilesSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
     'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'nag-later':()=>{lsSet(SNOOZE_KEY,String(Date.now()+3*864e5));render();},'nag-backup':()=>{if(cloud)backupNow().then(render);else fileBackup().then(m=>{toast(m.slice(0,80));render();});},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
@@ -1356,7 +1405,7 @@ function setSync(st){syncSt=st;const e=$('#sync');if(e){e.textContent=({local:'�
 const byId=(a,b)=>a.id<b.id?-1:a.id>b.id?1:0;
 function unionList(a,b){const m=new Map((a||[]).map(x=>[x.id,x]));(b||[]).forEach(x=>{if(!x||!x.id)return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0))m.set(x.id,x);});return Array.from(m.values()).sort(byId);}
 const KEYS=['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'];
-function localExport(){const o={app:'badcars',v:1};KEYS.forEach(k=>{o[k]=(db[k]||[]).slice().sort(byId);});o.settings=db.settings||null;return o;}
+function localExport(){const o={app:'badcars',v:1},dm=demoIds();KEYS.forEach(k=>{o[k]=(db[k]||[]).filter(x=>k==='vehicles'?dm.indexOf(x.id)<0:dm.indexOf(x.vehicleId)<0).sort(byId);});o.settings=db.settings||null;return o;}
 function unionDb(r,l){const o={app:'badcars',v:1};KEYS.forEach(k=>{o[k]=unionList(r&&r[k],l[k]);});o.settings=newerSettings(r&&r.settings,l.settings)||null;return o;}
 async function pushOnce(){
   const P=PROV[curProv()],rem=await P.read(),merged=unionDb(rem.data,localExport()),text=JSON.stringify(merged);
@@ -1366,7 +1415,7 @@ async function pushOnce(){
 }
 function authLost(){cloud=null;loginNeeded=true;odMsg='Přihlášení k '+pname()+' vypršelo, přihlas se znovu.';setSync('local');if(!$('#sheet').className)render();}
 async function pushAll(){
-  if(!cloud||!db.vehicles.length)return;
+  if(!cloud||!db.vehicles.some(v=>!v.demo))return;
   if(pushing){again=true;return;}
   pushing=true;setSync('busy');
   try{do{again=false;for(let i=0;i<3;i++){try{await pushOnce();break;}catch(e){if(e.conflict&&i<2)continue;throw e;}}}while(again);
@@ -1374,7 +1423,7 @@ async function pushAll(){
   catch(e){if(e.auth)authLost();else{odMsg=e.message;setSync('err');}}
   pushing=false;
 }
-function schedulePush(){if(!cloud||!db.vehicles.length)return;clearTimeout(pushT);setSync('busy');pushT=setTimeout(pushAll,1500);}
+function schedulePush(){if(!cloud||!db.vehicles.some(v=>!v.demo))return;clearTimeout(pushT);setSync('busy');pushT=setTimeout(pushAll,1500);}
 async function backupNow(){if(!cloud){odMsg=provList().length?'Nejdřív se přihlas ke cloudu.':'';setSync('local');return;}clearTimeout(pushT);await pushAll();}
 async function restoreNow(){
   if(!cloud){odMsg=provList().length?'Nejdřív se přihlas ke cloudu.':'';setSync('local');return null;}
@@ -1396,7 +1445,7 @@ async function fileBackup(){
 let updReady=false;
 const NAG_DAYS=7,SNOOZE_KEY='badcars.nagSnooze';
 function backupNag(){
-  if(!db.vehicles.some(v=>!v.deleted))return '';
+  if(!db.vehicles.some(v=>!v.deleted&&!v.demo))return '';
   const now=Date.now(),lc=+(lsGet('badcars.lastChange')||0);if(!lc)return '';
   const safe=Math.max(+(lastBackup()||0),+(lastFile()||0));
   if(safe>=lc)return '';
@@ -1435,7 +1484,7 @@ async function startup(){
   if(!cloudSignedIn()){loginNeeded=!!(lsGet(WAS_KEY)&&PROV[lsGet(WAS_KEY)]&&PROV[lsGet(WAS_KEY)].configured());setSync('local');render();return;}
   cloud=true;setSync('busy');
   try{const rem=await PROV[curProv()].read();
-    if(!db.vehicles.some(v=>!v.deleted)){offer=rem.data?(rem.data.vehicles||[]).filter(v=>!v.deleted).length:0;render();setSync('ok');}
+    if(!db.vehicles.some(v=>!v.deleted&&!v.demo)){offer=rem.data?(rem.data.vehicles||[]).filter(v=>!v.deleted).length:0;render();setSync('ok');}
     else{if(rem.data&&adoptSettings(rem.data.settings))render();await pushAll();}
   }catch(e){if(e.auth)authLost();else{odMsg=e.message;setSync('err');}}
 }
