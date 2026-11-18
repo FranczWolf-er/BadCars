@@ -113,8 +113,8 @@ const uid=()=>(crypto.randomUUID?crypto.randomUUID():Date.now().toString(36)+Mat
 const KEY='badcars.v1';
 let storageOk=true;
 function loadDb(){try{const s=localStorage.getItem(KEY);if(s)return JSON.parse(s);}catch(e){storageOk=false;}return null;}
-let db=loadDb()||{v:1,vehicles:[],fuelings:[],odos:[],repairs:[],tasks:[],fixed:[],tires:[],tireEvents:[],parts:[],trips:[],activeVehicle:null};
-db.fixed=db.fixed||[];db.tires=db.tires||[];db.tireEvents=db.tireEvents||[];db.parts=db.parts||[];db.trips=db.trips||[];
+let db=loadDb()||{v:1,vehicles:[],fuelings:[],odos:[],repairs:[],tasks:[],fixed:[],tires:[],tireEvents:[],parts:[],trips:[],expenses:[],activeVehicle:null};
+db.fixed=db.fixed||[];db.tires=db.tires||[];db.tireEvents=db.tireEvents||[];db.parts=db.parts||[];db.trips=db.trips||[];db.expenses=db.expenses||[];
 function persistLocal(){try{localStorage.setItem(KEY,JSON.stringify(db));}catch(e){storageOk=false;}}
 function persist(){persistLocal();try{localStorage.setItem('badcars.lastChange',String(Date.now()));}catch(e){}schedulePush();}
 const touch=r=>{r.updatedAt=Date.now();return r;};
@@ -136,6 +136,7 @@ function odoPoints(vid){
   live('fuelings',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'fuel'}));
   live('odos',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'odo'}));
   live('repairs',vid).forEach(f=>{if(f.odo!=null)p.push({id:f.id,date:f.date,odo:f.odo,src:'repair'});});
+  live('expenses',vid).forEach(f=>{if(f.odo!=null)p.push({id:f.id,date:f.date,odo:f.odo,src:'exp'});});
   live('tireEvents',vid).forEach(f=>p.push({id:f.id,date:f.date,odo:f.odo,src:'tire'}));
   live('trips',vid).forEach(f=>{if(f.odoStart!=null)p.push({id:f.id+'-s',date:f.date,odo:f.odoStart,src:'trip'});if(f.odoEnd!=null)p.push({id:f.id,date:f.date,odo:f.odoEnd,src:'trip'});});
   live('parts',vid).forEach(f=>{if(f.odo!=null)p.push({id:f.id,date:f.date,odo:f.odo,src:'part'});if(f.removedOdo!=null&&f.removedDate)p.push({id:f.id+'-r',date:f.removedDate,odo:f.removedOdo,src:'part'});});
@@ -184,14 +185,14 @@ function periodStats(vid,ym){
   const f=sortedFuels(vid),inP=d=>!ym||d.startsWith(ym);
   const inside=f.filter(x=>inP(x.date)),before=ym?f.filter(x=>x.date<ym):[];
   const reps=live('repairs',vid).filter(r=>inP(r.date));
-  const out={n:inside.length,spent:sumCost(inside),liters:inside.reduce((s,x)=>s+x.liters,0),rep:reps.reduce((s,r)=>s+repCost(r),0),repN:reps.length,km:0,fixed:0,allPerKm:null,l100:null,fuelPerKm:null,totalPerKm:null};
+  const out={n:inside.length,spent:sumCost(inside),liters:inside.reduce((s,x)=>s+x.liters,0),rep:reps.reduce((s,r)=>s+repCost(r),0),repN:reps.length,oth:expSum(vid,inP),othN:live('expenses',vid).filter(x=>inP(x.date)).length,km:0,fixed:0,allPerKm:null,l100:null,fuelPerKm:null,totalPerKm:null};
   if(!inside.length)return out;
   const baseBefore=before.length?before[before.length-1]:null,base=baseBefore||inside[0];
   const list=baseBefore?inside:inside.slice(1),last=inside[inside.length-1];
   out.km=last.odo-base.odo;
   if(out.km>0&&list.length){
     const L=list.reduce((s,x)=>s+x.liters,0),C=sumCost(list);
-    const repKm=reps.filter(r=>r.date<=last.date).reduce((s,r)=>s+repCost(r),0);
+    const repKm=reps.filter(r=>r.date<=last.date).reduce((s,r)=>s+repCost(r),0)+expSum(vid,d=>inP(d)&&d<=last.date);
     out.fixed=fixedShare(vid,base.date,last.date);
     out.l100=L/out.km*100;out.fuelPerKm=C/out.km;out.totalPerKm=(C+repKm)/out.km;out.allPerKm=(C+repKm+out.fixed)/out.km;
   }
@@ -231,8 +232,8 @@ function rangeStats(vid,a,b){
   const reps=live('repairs',vid).filter(r=>inR(r.date)),fuel=sumCost(inside),rep=reps.reduce((s,r)=>s+repCost(r),0),liters=inside.reduce((s,x)=>s+x.liters,0);
   const base=before.length?before[before.length-1]:inside[0],last=inside[inside.length-1];
   const km=inside.length&&last.odo>base.odo?last.odo-base.odo:0,list=before.length?inside:inside.slice(1),L=list.reduce((s,x)=>s+x.liters,0);
-  const fixed=fixedShare(vid,a,b),total=fuel+rep+fixed;
-  return {km:km,fuel:fuel,rep:rep,fixed:fixed,total:total,liters:liters,n:inside.length,l100:km>0&&L>0?L/km*100:null,perKm:km>0?total/km:null,price:liters>0?fuel/liters:null};
+  const oth=expSum(vid,inR),fixed=fixedShare(vid,a,b),total=fuel+rep+oth+fixed;
+  return {km:km,fuel:fuel,rep:rep,oth:oth,fixed:fixed,total:total,liters:liters,n:inside.length,l100:km>0&&L>0?L/km*100:null,perKm:km>0?total/km:null,price:liters>0?fuel/liters:null};
 }
 function yearCompare(v){
   const today=todayIso(),cy=today.slice(0,4),md=today.slice(5);
@@ -241,7 +242,7 @@ function yearCompare(v){
   const full=show.map(y=>({y:y,s:rangeStats(v,y+'-01-01',y===cy?today:y+'-12-31')}));
   const prev=String(+cy-1),hasCy=show.indexOf(cy)>=0&&ys.indexOf(prev)>=0;
   const ytdPrev=hasCy?rangeStats(v,prev+'-01-01',prev+'-'+md):null,cur=hasCy?full[full.length-1].s:null;
-  const M=[['km','Ujeto','km',0,null],['fuel','Palivo','Kč',0,1],['rep','Servis','Kč',0,1],['fixed','Fixní náklady','Kč',0,1],['total','Celkem','Kč',0,1],['l100','Spotřeba','l/100',1,1],['price','Cena paliva','Kč/l',2,1],['perKm','Celkem na km','Kč/km',2,1]];
+  const M=[['km','Ujeto','km',0,null],['fuel','Palivo','Kč',0,1],['rep','Servis','Kč',0,1],['oth','Ostatní výdaje','Kč',0,1],['fixed','Fixní náklady','Kč',0,1],['total','Celkem','Kč',0,1],['l100','Spotřeba','l/100',1,1],['price','Cena paliva','Kč/l',2,1],['perKm','Celkem na km','Kč/km',2,1]];
   const fmt=(x,d)=>x==null?'–':nf(x,d);
   const delta=(a,b,bad)=>{if(a==null||b==null||!b)return '<td>–</td>';const d=(a-b)/b*100,up=d>0,c=Math.abs(d)<2||bad==null?'':((up===!!bad)?'late':'ok');return '<td><span class="chip '+c+'" style="font-size:12px">'+(Math.abs(d)<0.5?'≈ 0':(up?'▲ +':'▼ ')+nf(d,0))+' %</span></td>';};
   let h='<h2>Porovnání let</h2><div class="card" style="overflow-x:auto"><table class="yc"><thead><tr><th></th>'+full.map(o=>'<th>'+o.y+(o.y===cy?'*':'')+'</th>').join('')+(hasCy?'<th>vs. loni</th>':'')+'</tr></thead><tbody>'
@@ -251,18 +252,19 @@ function yearCompare(v){
   return h;
 }
 function periodYears(vid){
-  const set={};live('fuelings',vid).concat(live('repairs',vid)).forEach(x=>{set[x.date.slice(0,4)]=1;});
+  const set={};live('fuelings',vid).concat(live('repairs',vid),live('expenses',vid)).forEach(x=>{set[x.date.slice(0,4)]=1;});
   return Object.keys(set).sort().reverse();
 }
 const sumCost=a=>a.reduce((s,x)=>s+(x.total||0),0);
 const repCost=r=>(r.parts||0)+(r.labor||0);
+const expSum=(vid,f)=>live('expenses',vid).filter(x=>!f||f(x.date)).reduce((s,x)=>s+(x.amount||0),0);
 function costStats(vid){
   const fuels=live('fuelings',vid).sort((a,b)=>a.odo-b.odo||a.date.localeCompare(b.date));
   if(fuels.length<2)return null;
   const first=fuels[0],last=fuels[fuels.length-1],km=last.odo-first.odo;
   if(km<=0)return null;
   const fuel=sumCost(fuels.slice(1));
-  const rep=live('repairs',vid).filter(r=>r.date>=first.date&&r.date<=last.date).reduce((s,r)=>s+repCost(r),0);
+  const rep=live('repairs',vid).filter(r=>r.date>=first.date&&r.date<=last.date).reduce((s,r)=>s+repCost(r),0)+expSum(vid,d=>d>=first.date&&d<=last.date);
   return {km:km,fuel:fuel,rep:rep,fuelPerKm:fuel/km,totalPerKm:(fuel+rep)/km};
 }
 function dailyKm(vid){
@@ -302,6 +304,7 @@ const rankMonths=(vid,n)=>{
   for(let i=n-1;i>=0;i--){const t=new Date(d.getFullYear(),d.getMonth()-i,1);out.push({key:isoD(t).slice(0,7),fuel:0,svc:0});}
   live('fuelings',vid).forEach(f=>{const m=out.find(x=>x.key===f.date.slice(0,7));if(m)m.fuel+=f.total||0;});
   live('repairs',vid).forEach(r=>{const m=out.find(x=>x.key===r.date.slice(0,7));if(m)m.svc+=repCost(r);});
+  live('expenses',vid).forEach(r=>{const m=out.find(x=>x.key===r.date.slice(0,7));if(m)m.svc+=r.amount||0;});
   return out;
 };
 const cnum=x=>{const t=String(x==null?'':x).replace(/\s/g,'').replace(',','.');if(t==='')return null;const n=Number(t);return isNaN(n)?null:n;};
@@ -316,8 +319,8 @@ function tco(vid){
   const deprec=buy!=null?buy-(resid||0):0;
   const pts=odoPoints(vid).map(p=>p.odo),o0=cnum(c.buyOdo)!=null?cnum(c.buyOdo):(car&&car.startOdo!=null?car.startOdo:(pts.length?Math.min.apply(null,pts):null)),cur=currentOdo(vid);
   const km=o0!=null&&cur!=null?cur-o0:null,days=Math.max(1,Math.round((pd(to)-pd(from))/DAY)+1);
-  const operating=fuel+rep+fixed,total=operating+deprec;
-  return {from:from,to:to,days:days,km:km,fuel:fuel,rep:rep,fixed:fixed,buy:buy,resid:resid,residKind:sell!=null?'sell':(est!=null?'est':null),deprec:deprec,operating:operating,total:total,
+  const oth=expSum(vid,inR),operating=fuel+rep+oth+fixed,total=operating+deprec;
+  return {from:from,to:to,days:days,km:km,fuel:fuel,rep:rep,oth:oth,fixed:fixed,buy:buy,resid:resid,residKind:sell!=null?'sell':(est!=null?'est':null),deprec:deprec,operating:operating,total:total,
     perKm:km>0?total/km:null,opPerKm:km>0?operating/km:null,perYear:days>=30?total/days*365.25:null,perMonth:days>=30?total/days*30.44:null,opPerMonth:days>=30?operating/days*30.44:null};
 }
 const METRICS=[['l100','Spotřeba','l/100 km',1],['kml','Km na litr','km/l',2],['price','Cena paliva','Kč/l',2],['costkm','Palivo na km','Kč/km',2],['month','Náklady měsíčně','Kč',0]];
@@ -356,7 +359,7 @@ const num=s=>{let t=String(s==null?'':s).replace(/[\s ]/g,'').replace(/(kč|czk
   if(!/^-?\d+(\.\d+)?$/.test(t))return NaN;return Number(t);};
 
 /* ---------- stav UI ---------- */
-let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tlFilter={fuel:1,svc:1,task:1,part:1,tire:1,trip:1,other:1},tlMonths=12,tileEdit=false,tileSel=null,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
+let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tlFilter={fuel:1,svc:1,exp:1,task:1,part:1,tire:1,trip:1,other:1},tlMonths=12,tileEdit=false,tileSel=null,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
 function vid(){
   const act=vehicleById(db.activeVehicle);
   if(act)return act.id;
@@ -391,6 +394,7 @@ function fuelForm(id){
    +'<div class="two"><div><label for="f_l">Litry</label><input id="f_l" inputmode="decimal" value="'+(ex?ex.liters:'')+'"></div>'
    +'<div><label for="f_ppl">Cena za litr (Kč)</label><input id="f_ppl" inputmode="decimal" value="'+(ex&&ex.liters?+(ex.total/ex.liters).toFixed(2):'')+'"></div></div>'
    +'<label for="f_tot">Celkem (Kč)</label><input id="f_tot" inputmode="decimal" value="'+(ex?ex.total:'')+'">'
+   +'<label for="f_fuel">Palivo</label><select class="f" id="f_fuel">'+(f0=>FUELS.concat(FUELS.indexOf(f0)<0?[f0]:[]).map(x=>'<option'+(x===f0?' selected':'')+'>'+esc(x)+'</option>').join(''))(ex&&ex.fuel||defFuel(v,ex&&ex.id))+'</select>'
    +'<label class="chk"><input id="f_full" type="checkbox" '+(ex&&ex.full?'checked':'')+'> Plná nádrž (volitelné, zpřesní spotřebu)</label>'
    +'<label for="f_note">Poznámka</label><input id="f_note" value="'+esc(ex?ex.note:'')+'">';
   openSheet(ex?'Upravit tankování':'Nové tankování',body,{
@@ -421,7 +425,7 @@ function fuelForm(id){
       {const prev=sortedFuels(v).filter(x=>x!==ex&&x.date<=date).sort((a,b)=>b.date.localeCompare(a.date)||b.odo-a.odo)[0];
        if(prev&&odo-prev.odo>3000&&(odo-prev.odo)/Math.max(1,(pd(date)-pd(prev.date))/DAY)>1500){const w=warnOnce('j'+odo,'Od minulého tankování ('+fdate(prev.date)+') by to bylo '+nf(odo-prev.odo)+' km. Zkontroluj tachometr.');if(w)return w;}}
       const rec=ex||{id:uid(),vehicleId:v};
-      Object.assign(rec,{date:date,odo:Math.round(odo),liters:l,total:t,full:$('#f_full').checked,note:val('f_note').trim()});
+      Object.assign(rec,{date:date,odo:Math.round(odo),liters:l,total:t,fuel:val('f_fuel'),full:$('#f_full').checked,note:val('f_note').trim()});
       touch(rec);if(!ex)db.fuelings.push(rec);persist();
     },
     onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
@@ -711,6 +715,7 @@ function validRec(k,x){
     case 'fixed':return isN(x.year)&&isN(x.amount)&&!!x.vehicleId;
     case 'tireEvents':return dOk(x.date)&&isN(x.odo)&&!!x.tireId;
     case 'parts':return dOk(x.date)&&typeof x.name==='string'&&!!x.vehicleId;
+    case 'expenses':return dOk(x.date)&&isN(x.amount)&&x.amount>=0&&!!x.vehicleId;
     case 'trips':return dOk(x.date)&&!!x.vehicleId&&(isN(x.km)||(isN(x.odoStart)&&isN(x.odoEnd)));
     default:return !!x.vehicleId||k==='vehicles';
   }
@@ -719,7 +724,7 @@ function mergeDb(inc){
   if(!inc||typeof inc!=='object')throw new Error('Neplatný soubor.');
   inc=JSON.parse(JSON.stringify(inc));
   let n=0;
-  ['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'].forEach(k=>{
+  ['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips','expenses'].forEach(k=>{
     db[k]=db[k]||[];
     if(inc[k]!==undefined&&!Array.isArray(inc[k]))throw new Error('Neplatná data ('+k+').');
     const m=new Map(db[k].map(x=>[x.id,x]));
@@ -828,7 +833,7 @@ function makeDemo(){
 }
 function removeDemo(){
   const ids=demoIds();if(!ids.length)return;
-  ['fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'].forEach(k=>{db[k]=(db[k]||[]).filter(x=>ids.indexOf(x.vehicleId)<0);});
+  ['fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips','expenses'].forEach(k=>{db[k]=(db[k]||[]).filter(x=>ids.indexOf(x.vehicleId)<0);});
   db.vehicles=db.vehicles.filter(v=>ids.indexOf(v.id)<0);
   if(ids.indexOf(db.activeVehicle)>=0){const o=db.vehicles.find(v=>!v.deleted);db.activeVehicle=o?o.id:null;}
   persist();
@@ -857,16 +862,20 @@ const TILE_DEFS=[
  ['lastfuel','Poslední tankování',(v,D)=>{const f=sortedFuels(v).sort((a,b)=>a.date.localeCompare(b.date)).pop();return tile('Poslední tankování',f?fdate(f.date):'–',f?nf(f.liters,1)+' l · '+money(f.total):'');}],
  ['fueltotal','Palivo celkem',(v,D,Y)=>Y?tile('Palivo letos',money(D.ps.spent),nf(D.ps.liters,0)+' l · '+D.ps.n+' tankování'):tile('Palivo celkem',money(D.C),nf(D.L,0)+' l'),1],
  ['reptotal','Servis celkem',(v,D,Y)=>{const rs=live('repairs',v).filter(r=>!Y||r.date.startsWith(D.year));return tile(Y?'Servis letos':'Servis celkem',money(rs.reduce((s,r)=>s+repCost(r),0)),rs.length+' zápisů');},1],
+ ['exptotal','Ostatní výdaje',(v,D,Y)=>{const l=live('expenses',v).filter(x=>!Y||x.date.startsWith(D.year));return tile(Y?'Ostatní výdaje letos':'Ostatní výdaje',money(l.reduce((s,x)=>s+(x.amount||0),0)),l.length+' zápisů');},1],
  ['tco','TCO celkem',(v,D)=>tile('TCO celkem',D.t?money(D.t.total):'–',D.t?(D.t.buy!=null?'vč. ztráty hodnoty':'bez pořizovací ceny'):'')],
  ['tcokm','TCO na km',(v,D)=>tile('TCO na km',D.t&&D.t.perKm!=null?nf(D.t.perKm,2)+' <small>Kč/km</small>':'–',D.t&&D.t.buy!=null?'vč. ztráty hodnoty':'bez pořizovací ceny')],
  ['tcoyear','TCO za rok',(v,D)=>tile('TCO za rok',D.t&&D.t.perYear!=null?money(D.t.perYear):'–')],
- ['opmonth','Provozní náklady měsíčně',(v,D,Y)=>{if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,tot=D.ps.spent+D.ps.rep+fixedShare(v,D.year+'-01-01',todayIso());return tile('Náklady měsíčně letos',days>=15?money(tot/days*30.44):'–','letos · palivo + servis + fixní');}return tile('Náklady měsíčně',D.t&&D.t.opPerMonth!=null?money(D.t.opPerMonth):'–','palivo + servis + fixní');},1]];
+ ['opmonth','Provozní náklady měsíčně',(v,D,Y)=>{if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,tot=D.ps.spent+D.ps.rep+D.ps.oth+fixedShare(v,D.year+'-01-01',todayIso());return tile('Náklady měsíčně letos',days>=15?money(tot/days*30.44):'–','letos · palivo + servis + fixní');}return tile('Náklady měsíčně',D.t&&D.t.opPerMonth!=null?money(D.t.opPerMonth):'–','palivo + servis + fixní');},1]];
 const tilePer=id=>((db.settings||{}).tilePeriod||{})[id]==='year';
 function tireState(t){
   const age=dotAge(t.dot),lt=lastTread(t),lim=t.season!=='letní'?[4,5]:[1.6,3];
   const a=age==null?null:(age>=10?'late':(age>=6?'soon':'ok')),r=lt?(lt.mm<lim[0]?'late':(lt.mm<lim[1]?'soon':'ok')):null;
   const w={late:2,soon:1,ok:0};if(a==null&&r==null)return null;return [a,r].filter(Boolean).sort((x,y)=>w[y]-w[x])[0];
 }
+const FUELS=['Natural 95','Natural 98','Natural 100','Nafta','Nafta prémiová','LPG','CNG','Jiné'];
+function defFuel(v,exId){const l=live('fuelings',v).filter(x=>x.fuel&&x.id!==exId).sort((a,b)=>b.date.localeCompare(a.date))[0];if(l)return l.fuel;const c=((vehicleById(v)||{}).card||{}).fuel||'';return /naft|diesel|NM/i.test(c)?'Nafta':(/LPG/i.test(c)?'LPG':(/CNG/i.test(c)?'CNG':'Natural 95'));}
+const EXP_CATS=['Mytí a čištění','Parkování','Mýto a dálniční poplatky','Příslušenství','Kapaliny a drogerie','Pokuty','Jiné'];
 const PART_CATS=[['Přední brzdové destičky',40000,null],['Zadní brzdové destičky',50000,null],['Přední brzdové kotouče',80000,null],['Zadní brzdové kotouče',100000,null],['Motorový olej',15000,12],['Olej v převodovce',60000,null],['Olej v rozvodovce / diferenciálu',60000,null],['Vzduchový filtr',30000,null],['Palivový filtr',40000,null],['Kabinový filtr',null,12],['Zapalovací svíčky',40000,null],['Rozvody',120000,60],['Autobaterie',null,60],['Brzdová kapalina',null,24],['Chladicí kapalina',null,60],['Stěrače',null,12],['Tlumiče',100000,null],['Jiný díl',null,null]];
 function partLife(x){const t=x.taskId?db.tasks.find(y=>y.id===x.taskId&&!y.deleted&&!y.done):null;return t?{km:t.intervalKm||null,mo:t.intervalMonths||null,task:t}:{km:x.lifeKm||null,mo:x.lifeMonths||null,task:null};}
 function partInfo(x,cur){
@@ -952,7 +961,7 @@ function tileHelp(id){
    case 'reptotal':b=P(Y?'Součet letošních zápisů v Servisu (díly + práce).':'Součet všech zápisů v Servisu (díly + práce).');break;
    case 'tco':case 'tcokm':case 'tcoyear':{const t=D.t;b=P('TCO = ztráta hodnoty + palivo + servis + fixní náklady za celou dobu držení (od data pořízení na kartě vozidla, jinak od prvního záznamu). Ztráta hodnoty = pořizovací cena − prodejní cena nebo odhad současné hodnoty. Na km = TCO ÷ ujeté km od koupě; za rok = TCO ÷ dny držení × 365,25.');
      if(t)b+=box(K('Období',fdate(t.from)+' – '+fdate(t.to)+' ('+nf(t.days)+' dní)')+(t.km!=null?K('Ujeto',nf(t.km)+' km'):'')+K('Ztráta hodnoty',t.buy!=null?money(t.deprec):'pořizovací cena nezadána')+K('Palivo',money(t.fuel))+K('Servis',money(t.rep))+K('Fixní',money(t.fixed))+K('TCO celkem',money(t.total))+K('Na km',t.perKm!=null?nf(t.perKm,2)+' Kč':'–')+K('Za rok',t.perYear!=null?money(t.perYear):'–'));break;}
-   case 'opmonth':if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,fx=fixedShare(v,D.year+'-01-01',todayIso()),tot=ps.spent+ps.rep+fx;
+   case 'opmonth':if(Y){const days=Math.round((pd(todayIso())-pd(D.year+'-01-01'))/DAY)+1,fx=fixedShare(v,D.year+'-01-01',todayIso()),tot=ps.spent+ps.rep+ps.oth+fx;
        b=P('Letošní provozní náklady (palivo + servis + fixní poměrně) ÷ dny od 1. 1. × 30,44 (průměrný počet dní v měsíci).')+box(K('Palivo',money(ps.spent))+K('Servis',money(ps.rep))+K('Fixní (poměrně)',money(fx))+K('Součet',money(tot))+K('Dní',nf(days))+K('Měsíčně',days>=15?money(tot/days*30.44):'–'));}
      else{const t=D.t;b=P('Provozní náklady (palivo + servis + fixní náklady poměrně podle dnů) za celou dobu držení ÷ počet dní × 30,44. Pořizovací cena ani ztráta hodnoty se nezapočítávají.')+(t?box(K('Období',fdate(t.from)+' – '+fdate(t.to)+' ('+nf(t.days)+' dní)')+K('Palivo',money(t.fuel))+K('Servis',money(t.rep))+K('Fixní (poměrně)',money(t.fixed))+K('Součet',money(t.operating))+K('Měsíčně',t.opPerMonth!=null?money(t.opPerMonth):'–')):'');}
      break;
@@ -1113,8 +1122,45 @@ function viewFuel(v){
   let h='<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Nové tankování</button></div>';
   if(!list.length)return h+'<div class="empty">Zatím žádné tankování.</div>';
   h+='<div class="list">'+list.map(f=>{const s=map[f.id];
-    return '<button class="row" data-act="edit-fuel" data-id="'+f.id+'"><div class="r1"><b>'+fdate(f.date)+' · '+nf(f.odo)+' km</b><span>'+money(f.total)+'</span></div><div class="r2">'+nf(f.liters,2)+' l · '+nf(f.total/f.liters,2)+' Kč/l'+(f.full?'':' · částečné')+(s?' · <b>'+nf(s.l100,1)+' l/100 km</b>':'')+(f.note?' · '+esc(f.note):'')+'</div></button>';}).join('')+'</div>';
+    return '<button class="row" data-act="edit-fuel" data-id="'+f.id+'"><div class="r1"><b>'+fdate(f.date)+' · '+nf(f.odo)+' km</b><span>'+money(f.total)+'</span></div><div class="r2">'+nf(f.liters,2)+' l'+(f.fuel?' '+esc(f.fuel):'')+' · '+nf(f.total/f.liters,2)+' Kč/l'+(f.full?'':' · částečné')+(s?' · <b>'+nf(s.l100,1)+' l/100 km</b>':'')+(f.note?' · '+esc(f.note):'')+'</div></button>';}).join('')+'</div>';
   return h;
+}
+function expForm(id){
+  const v=vid(),ex=id?db.expenses.find(x=>x.id===id):null;
+  openSheet(ex?'Upravit výdaj':'Nový výdaj',
+   '<label for="e_cat">Druh výdaje</label><input id="e_cat" list="e_cats" autocomplete="off" value="'+esc(ex?ex.cat:'')+'" placeholder="napiš nebo vyber, např. Mytí"><datalist id="e_cats">'+EXP_CATS.map(c=>'<option value="'+c+'">').join('')+'</datalist>'
+   +'<div class="two"><div><label for="e_date">Datum</label><input id="e_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div><div><label for="e_amt">Částka (Kč)</label><input id="e_amt" inputmode="decimal" value="'+(ex?ex.amount:'')+'"></div></div>'
+   +'<label for="e_odo">Tachometr (km, volitelné)</label><input id="e_odo" inputmode="numeric" value="'+(ex&&ex.odo!=null?ex.odo:'')+'">'
+   +'<label for="e_note">Poznámka</label><input id="e_note" value="'+esc(ex?ex.note||'':'')+'">'
+   +'<p class="sub">Ostatní výdaje se počítají do celkových nákladů, nákladů na km i TCO.</p>',{
+    onSave(){
+      const cat=val('e_cat').trim(),date=val('e_date'),amt=num(val('e_amt')),odo=num(val('e_odo'));
+      if(!cat)return 'Zadej druh výdaje.';
+      {const de=evDate(date);if(de)return de;}
+      if(amt==null||isNaN(amt))return 'Zadej částku.';
+      if(amt<0)return 'Částka nemůže být záporná.';
+      if(isNaN(odo)||(odo!=null&&odo<=0))return 'Neplatný stav tachometru.';
+      if(odo!=null){const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;}
+      if(live('expenses',v).some(x=>x!==ex&&x.date===date&&x.cat===cat&&Math.abs(x.amount-amt)<0.01)){const w=warnOnce('e'+date+cat+amt,'Stejný výdaj už je zapsaný.');if(w)return w;}
+      const rec=ex||{id:uid(),vehicleId:v};
+      Object.assign(rec,{cat:cat,date:date,amount:amt,odo:odo!=null?Math.round(odo):null,note:val('e_note').trim()});
+      touch(rec);if(!ex)db.expenses.push(rec);persist();
+    },
+    onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
+  });
+}
+function viewExpenses(v){
+  const list=live('expenses',v).sort((a,b)=>b.date.localeCompare(a.date)),y=String(new Date().getFullYear());
+  let h='<div class="actions"><button class="btn primary" data-act="new-exp">💳 Nový výdaj</button></div>';
+  if(!list.length)return h+'<div class="empty">Zatím žádné ostatní výdaje. Patří sem mytí, parkování, mýto, příslušenství, pokuty a podobně.</div>';
+  const by={};list.filter(x=>x.date.startsWith(y)).forEach(x=>{by[x.cat]=(by[x.cat]||0)+x.amount;});
+  const tot=list.reduce((s,x)=>s+x.amount,0),ty=Object.keys(by).reduce((s,k)=>s+by[k],0);
+  h+='<div class="sub" style="margin:0 2px 8px">Celkem: <b>'+money(tot)+'</b> · letos: <b>'+money(ty)+'</b>'+(Object.keys(by).length?' ('+Object.keys(by).sort((a,b)=>by[b]-by[a]).map(k=>esc(k)+' '+money(by[k])).join(', ')+')':'')+'</div>';
+  return h+'<div class="list">'+list.map(x=>'<button class="row" data-act="edit-exp" data-id="'+x.id+'"><div class="r1"><b>'+esc(x.cat)+'</b><span>'+money(x.amount)+'</span></div><div class="r2">'+fdate(x.date)+(x.odo!=null?' · '+nf(x.odo)+' km':'')+(x.note?' · '+esc(x.note):'')+'</div></button>').join('')+'</div>';
+}
+function fuelByType(v,ym){
+  const g={};live('fuelings',v).filter(f=>!ym||f.date.startsWith(ym)).forEach(f=>{const k=f.fuel||'neuvedeno';g[k]=g[k]||{l:0,c:0,n:0};g[k].l+=f.liters;g[k].c+=f.total;g[k].n++;});
+  return Object.keys(g).sort((a,b)=>g[b].l-g[a].l).map(k=>({fuel:k,liters:g[k].l,cost:g[k].c,n:g[k].n}));
 }
 function viewService(v){
   const list=live('repairs',v).sort((a,b)=>b.date.localeCompare(a.date));
@@ -1126,8 +1172,9 @@ function viewService(v){
   return h;
 }
 function viewTasks(v){
-  const seg='<div class="seg"><button data-sub="rep" aria-pressed="'+(tasksSub==='rep')+'">Servis</button><button data-sub="tasks" aria-pressed="'+(tasksSub==='tasks')+'">Úkony</button><button data-sub="fixed" aria-pressed="'+(tasksSub==='fixed')+'">Fixní náklady</button></div>';
+  const seg='<div class="seg"><button data-sub="rep" aria-pressed="'+(tasksSub==='rep')+'">Servis</button><button data-sub="exp" aria-pressed="'+(tasksSub==='exp')+'">Výdaje</button><button data-sub="tasks" aria-pressed="'+(tasksSub==='tasks')+'">Úkony</button><button data-sub="fixed" aria-pressed="'+(tasksSub==='fixed')+'">Fixní</button></div>';
   if(tasksSub==='rep')return seg+viewService(v);
+  if(tasksSub==='exp')return seg+viewExpenses(v);
   if(tasksSub==='fixed'){
     const fx=live('fixed',v).sort((a,b)=>b.year-a.year||a.name.localeCompare(b.name,'cs'));
     let h=seg+'<div class="actions"><button class="btn primary" data-act="new-fixed">+ Fixní náklad</button></div>';
@@ -1171,12 +1218,13 @@ function viewStats(v){
   h+='<h2>Celkem za období</h2><div class="two"><div><label for="p_year">Rok</label><select class="f" id="p_year"><option value="">Vše</option>'+years.map(y=>'<option'+(y===pYear?' selected':'')+'>'+y+'</option>').join('')+'</select></div>'
    +'<div><label for="p_month">Měsíc</label><select class="f" id="p_month"'+(pYear?'':' disabled')+'><option value="">Celý rok</option>'+MN.map((m,i)=>{const k=String(i+1).padStart(2,'0');return '<option value="'+k+'"'+(k===pMonth?' selected':'')+'>'+m+'</option>';}).join('')+'</select></div></div>';
   h+='<div class="grid" style="margin-top:10px">'+tile('Palivo',money(ps.spent),nf(ps.liters,0)+' l · '+ps.n+' tankování')+tile('Servis',money(ps.rep),ps.repN+' zápisů')
-   +tile('Celkové výdaje',money(ps.spent+ps.rep))+tile('Ujeto',ps.km>0?nf(ps.km)+' <small>km</small>':'–')
+   +(ps.othN?tile('Ostatní výdaje',money(ps.oth),ps.othN+' zápisů'):'')+tile('Celkové výdaje',money(ps.spent+ps.rep+ps.oth))+tile('Ujeto',ps.km>0?nf(ps.km)+' <small>km</small>':'–')
    +tile('Spotřeba',ps.l100!=null?nf(ps.l100,1)+' <small>l/100 km</small>':'–',ps.l100!=null?'odhad z litrů a km':'málo dat v období')
    +tile('Průměrná cena paliva',ps.liters>0?nf(ps.spent/ps.liters,2)+' <small>Kč/l</small>':'–')
    +tile('Palivo na km',ps.fuelPerKm!=null?nf(ps.fuelPerKm,2)+' <small>Kč/km</small>':'–','jen tankování')
    +tile('Celkem na km',ps.totalPerKm!=null?nf(ps.totalPerKm,2)+' <small>Kč/km</small>':'–','palivo + servis')
    +(live('fixed',v).length?tile('Fixní náklady',money(ps.fixed),'poměrná část za sledované období')+tile('Vč. fixních na km',ps.allPerKm!=null?nf(ps.allPerKm,2)+' <small>Kč/km</small>':'–','palivo + servis + fixní'):'')+'</div>';
+  {const ft=fuelByType(v,ym);if(ft.length>1||(ft.length===1&&ft[0].fuel!=='neuvedeno'))h+='<h2>Podle druhu paliva</h2><div class="card">'+ft.map(x=>'<div class="kv"><span>'+esc(x.fuel)+' <small class="sub">('+x.n+'×)</small></span><b>'+nf(x.liters,0)+' l · '+nf(x.cost/x.liters,2)+' Kč/l · '+money(x.cost)+'</b></div>').join('')+'</div>';}
   h+=yearCompare(v);
   const t=tco(v),c0=(vehicleById(v)||{}).card||{};
   if(t){
@@ -1187,12 +1235,12 @@ function viewStats(v){
       +(t.buy!=null?kv('Pořizovací cena',money(t.buy)):'')
       +(t.buy!=null?kv(t.residKind==='sell'?'Prodejní cena':(t.residKind==='est'?'Odhad současné hodnoty':'Zbytková hodnota (nezadána)'),t.resid!=null?'− '+money(t.resid):'–'):'')
       +(t.buy!=null?kv('Ztráta hodnoty',money(t.deprec)):'')
-      +kv('Palivo',money(t.fuel))+kv('Servis a opravy',money(t.rep))+(live('fixed',v).length?kv('Fixní náklady',money(t.fixed)):'')
+      +kv('Palivo',money(t.fuel))+kv('Servis a opravy',money(t.rep))+(t.oth?kv('Ostatní výdaje',money(t.oth)):'')+(live('fixed',v).length?kv('Fixní náklady',money(t.fixed)):'')
       +kv('Celkem',money(t.total),true)
       +kv('Na km',t.perKm!=null?nf(t.perKm,2)+' Kč':'–')+kv('Za rok',t.perYear!=null?money(t.perYear):'–')+kv('Za měsíc',t.perMonth!=null?money(t.perMonth):'–')
       +'</div>'
       +(t.buy==null?'<p class="sub" style="margin:6px 2px">Bez pořizovací ceny jde jen o provozní náklady. Doplň ji v Auto → Karta vozidla → Pořízení a prodej (u prodaného auta i prodejní cenu a datum, jinak odhad současné hodnoty).</p>':(t.resid==null?'<p class="sub" style="margin:6px 2px">Bez prodejní ceny nebo odhadu hodnoty se do ztráty hodnoty počítá celá pořizovací cena. Doplň odhad současné hodnoty.</p>':''))
-      +'<p class="sub" style="margin:2px 2px 0">TCO = ztráta hodnoty + palivo + servis + fixní náklady. Platí za celou dobu držení, nezávisle na filtru období výše.</p>';
+      +'<p class="sub" style="margin:2px 2px 0">TCO = ztráta hodnoty + palivo + servis + ostatní výdaje + fixní náklady. Platí za celou dobu držení, nezávisle na filtru období výše.</p>';
   }
   return h;
 }
@@ -1290,10 +1338,11 @@ function viewParts(v){
   h+='<p class="sub" style="margin:10px 2px 0">Název dílu napíšeš libovolně, nabídka je jen pro rychlost. Brzdy, oleje a filtry se sledují podle ujetých km, autobaterie a kapaliny podle doby v autě. „Brzy" se hlásí podle prahů v nastavení.</p>';
   return h;
 }
-const TL_CATS=[['fuel','⛽','Tankování'],['svc','🔧','Servis'],['task','✓','Úkony'],['part','⚙','Díly'],['tire','🛞','Pneu'],['trip','🚗','Jízdy'],['other','📄','Ostatní']];
+const TL_CATS=[['fuel','⛽','Tankování'],['svc','🔧','Servis'],['exp','💳','Výdaje'],['task','✓','Úkony'],['part','⚙','Díly'],['tire','🛞','Pneu'],['trip','🚗','Jízdy'],['other','📄','Ostatní']];
 function timelineEvents(v){
   const E=[],car=vehicleById(v)||{},c=car.card||{},add=(o)=>{if(o.date&&requireDate(o.date))E.push(o);};
-  live('fuelings',v).forEach(f=>add({cat:'fuel',date:f.date,odo:f.odo,title:'Tankování '+nf(f.liters,1)+' l',sub:(f.liters>0?nf(f.total/f.liters,2)+' Kč/l':'')+(f.full?' · plná':'')+(f.note?' · '+esc(f.note):''),cost:f.total,act:'edit-fuel',id:f.id}));
+  live('fuelings',v).forEach(f=>add({cat:'fuel',date:f.date,odo:f.odo,title:'Tankování '+nf(f.liters,1)+' l'+(f.fuel?' '+esc(f.fuel):''),sub:(f.liters>0?nf(f.total/f.liters,2)+' Kč/l':'')+(f.full?' · plná':'')+(f.note?' · '+esc(f.note):''),cost:f.total,act:'edit-fuel',id:f.id}));
+  live('expenses',v).forEach(x=>add({cat:'exp',date:x.date,odo:x.odo,title:esc(x.cat||'Výdaj'),sub:esc(x.note||''),cost:x.amount,act:'edit-exp',id:x.id}));
   live('repairs',v).forEach(r=>add({cat:'svc',date:r.date,odo:r.odo,title:esc(r.title),sub:esc(r.shop||''),cost:repCost(r),act:'edit-repair',id:r.id}));
   live('tasks',v).forEach(t=>{
     if(t.done&&t.doneDate)add({cat:'task',date:t.doneDate,odo:t.doneOdo,title:'Provedeno: '+esc(t.name),sub:'jednorázový úkon',act:'edit-task',id:t.id});
@@ -1308,7 +1357,7 @@ function timelineEvents(v){
   live('trips',v).forEach(x=>add({cat:'trip',date:x.date,odo:x.odoEnd,title:'Služební jízda '+nf(tripKm(x))+' km',sub:esc([x.from,x.to].filter(Boolean).join(' → ')+(x.purpose?' · '+x.purpose:'')),act:'edit-trip',id:x.id}));
   live('fixed',v).forEach(x=>add({cat:'other',date:x.year+'-01-01',title:esc(x.name)+' '+x.year,sub:'fixní náklad za rok',cost:x.amount,act:'edit-fixed',id:x.id}));
   [[c.reg1,'1. registrace vozidla'],[c.regCz,'1. registrace v ČR'],[c.buyDate,'Pořízení vozidla'+(c.buyPrice?' za '+money(cnum(c.buyPrice)||0):'')],[c.sellDate,'Prodej vozidla'+(c.sellPrice?' za '+money(cnum(c.sellPrice)||0):'')],[car.startDate,'Začátek evidence v BadCars']].forEach(x=>{if(x[0])add({cat:'other',date:x[0],odo:x[1].indexOf('Pořízení')===0&&c.buyOdo?cnum(c.buyOdo):(x[1].indexOf('Začátek')===0?car.startOdo:null),title:x[1],sub:'',act:'edit-card',id:''});});
-  const ord={other:0,part:1,svc:2,task:3,tire:4,fuel:5,trip:6};
+  const ord={other:0,part:1,svc:2,exp:2,task:3,tire:4,fuel:5,trip:6};
   return E.sort((a,b)=>b.date.localeCompare(a.date)||((b.odo||0)-(a.odo||0))||(ord[b.cat]-ord[a.cat]));
 }
 function viewTimeline(v){
@@ -1392,7 +1441,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   const id=a.dataset.id,act=a.dataset.act;
   const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'demo-add':()=>{if(!demoIds().length)makeDemo();closeSheet();render();},'demo-del':()=>{let ok=true;try{ok=confirm('Smazat ukázkové auto a všechna jeho data?');}catch(e){}if(ok){removeDemo();closeSheet();render();}},'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
-    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
+    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'new-exp':()=>expForm(),'edit-exp':()=>expForm(id),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
     'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'nag-later':()=>{lsSet(SNOOZE_KEY,String(Date.now()+3*864e5));render();},'nag-backup':()=>{if(cloud)backupNow().then(render);else fileBackup().then(m=>{toast(m.slice(0,80));render();});},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
 });
@@ -1419,6 +1468,12 @@ function applyPatches(){
   if(!done('p8-card-register')){
     db.vehicles.forEach(v=>{if(!CARD_REG[v.id]||v.deleted)return;const d=Object.assign({},CARD_REG[v.id],PRIV[v.id]);v.card=v.card||{};Object.keys(d).forEach(k=>{if(!v.card[k])v.card[k]=d[k];});touch(v);});
     mark('p8-card-register');
+  }
+  if(!done('p10-fuel-type')){
+    db.fuelings.forEach(f=>{if(f.fuel||f.deleted)return;const n=(f.note||'');const c=((vehicleById(f.vehicleId)||{}).card||{}).fuel||'';
+      const t=/naft|diesel/i.test(c)?'Nafta':(/\b100\b/.test(n)?'Natural 100':(/\b98\b/.test(n)?'Natural 98':(/\b95/.test(n)||/benz|BA/i.test(c)?'Natural 95':null)));
+      if(t){f.fuel=t;touch(f);}});
+    mark('p10-fuel-type');
   }
   if(!done('p9-stk-register')){
     const L={'2cea01d5-cd17-5130-a440-79625a7483ba':'2026-09-30','652763f9-2795-542f-b092-967c695a04b8':'2026-06-13'};
@@ -1519,7 +1574,7 @@ function infoText(st){const p=curProv();return (provList().length?(st==='ok'&&p?
 function setSync(st){syncSt=st;const e=$('#sync');if(e){e.textContent=({local:'⚠ jen v zařízení',ok:'☁ '+pname(),busy:'⟳ zálohuji…',err:'⚠ záloha selhala'})[st];e.className='sync '+st;}const i=$('#syncinfo');if(i)i.textContent=infoText(st);}
 const byId=(a,b)=>a.id<b.id?-1:a.id>b.id?1:0;
 function unionList(a,b){const m=new Map((a||[]).map(x=>[x.id,x]));(b||[]).forEach(x=>{if(!x||!x.id)return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0))m.set(x.id,x);});return Array.from(m.values()).sort(byId);}
-const KEYS=['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips'];
+const KEYS=['vehicles','fuelings','odos','repairs','tasks','fixed','tires','tireEvents','parts','trips','expenses'];
 function localExport(){const o={app:'badcars',v:1},dm=demoIds();KEYS.forEach(k=>{o[k]=(db[k]||[]).filter(x=>k==='vehicles'?dm.indexOf(x.id)<0:dm.indexOf(x.vehicleId)<0).sort(byId);});o.settings=db.settings||null;return o;}
 function unionDb(r,l){const o={app:'badcars',v:1};KEYS.forEach(k=>{o[k]=unionList(r&&r[k],l[k]);});o.settings=newerSettings(r&&r.settings,l.settings)||null;return o;}
 async function pushOnce(){
