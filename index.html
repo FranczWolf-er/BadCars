@@ -347,7 +347,12 @@ const nf=(n,d=0)=>(n==null||isNaN(n))?'–':Number(n).toLocaleString('cs-CZ',{mi
 const money=n=>nf(n,0)+' Kč';
 const fdate=s=>{const a=s.split('-');return +a[2]+'. '+ +a[1]+'. '+a[0];};
 const monthLabel=k=>{const a=k.split('-');return ['led','úno','bře','dub','kvě','čvn','čvc','srp','zář','říj','lis','pro'][a[1]-1]+' '+a[0].slice(2);};
-const num=s=>{const t=String(s==null?'':s).replace(/\s/g,'').replace(',','.');if(t==='')return null;const n=Number(t);return isNaN(n)?NaN:n;};
+const num=s=>{let t=String(s==null?'':s).replace(/[\s ]/g,'').replace(/(kč|czk|km|mm|l|,-|\.-)$/i,'');if(t==='')return null;
+  const hc=t.indexOf(',')>=0,hd=t.indexOf('.')>=0;
+  if(hc&&hd){if(t.lastIndexOf(',')>t.lastIndexOf('.'))t=t.replace(/\./g,'').replace(',','.');else t=t.replace(/,/g,'');}
+  else if(hc){if(/^-?\d{1,3}(,\d{3}){2,}$/.test(t))t=t.replace(/,/g,'');else if((t.match(/,/g)||[]).length>1)return NaN;else t=t.replace(',','.');}
+  else if(hd&&/^-?\d{1,3}(\.\d{3})+$/.test(t))t=t.replace(/\./g,'');
+  if(!/^-?\d+(\.\d+)?$/.test(t))return NaN;return Number(t);};
 
 /* ---------- stav UI ---------- */
 let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tileEdit=false,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
@@ -362,6 +367,7 @@ function vid(){
 function toast(m){let t=document.getElementById('toast');if(!t){t=document.createElement('div');t.id='toast';t.setAttribute('role','status');t.style.cssText='position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--ink);color:var(--card);padding:8px 14px;border-radius:10px;font-size:14px;z-index:99;pointer-events:none;transition:opacity .3s';document.body.appendChild(t);}t.textContent=m;t.style.opacity='1';clearTimeout(t._h);t._h=setTimeout(()=>{t.style.opacity='0';},1600);}
 function closeSheet(){$('#sheet').className='';$('#sheet').innerHTML='';render();}
 function openSheet(title,body,o){
+  lastWarn='';
   o=o||{};
   $('#sheet').innerHTML='<div class="scrim" data-act="close"></div><form class="panel" id="sf" novalidate><div class="ph"><h2>'+esc(title)+'</h2><button type="button" class="x" data-act="close" aria-label="Zavřít">✕</button></div><div class="pb">'+body+'</div><p class="err" id="err" role="alert" style="padding:0 16px;margin:6px 0 0"></p><div class="pf">'+(o.onDelete?'<button type="button" class="btn danger" id="del">Smazat</button>':'')+'<button class="btn primary" type="submit">'+(o.saveLabel||'Uložit')+'</button></div></form>';
   $('#sheet').className='open';
@@ -372,7 +378,10 @@ function openSheet(title,body,o){
 const val=id=>$('#'+id).value;
 
 /* ---------- formuláře ---------- */
-function requireDate(s){return /^\d{4}-\d{2}-\d{2}$/.test(s);}
+function requireDate(s){if(!/^\d{4}-\d{2}-\d{2}$/.test(s||''))return false;const d=new Date(s+'T00:00:00');return !isNaN(d)&&d.toISOString().slice(0,10)===s||new Date(s+'T12:00:00').getDate()===+s.slice(8);}
+function evDate(s){if(!requireDate(s))return 'Zadej datum.';if(s>todayIso())return 'Datum nemůže být v budoucnosti.';if(s<'1950-01-01')return 'Datum je příliš staré.';return null;}
+let lastWarn='';
+function warnOnce(key,msg){if(lastWarn===key){lastWarn='';return null;}lastWarn=key;return '⚠ '+msg+' Pokud je to správně, klepni znovu na Uložit.';}
 
 function fuelForm(id){
   const v=vid(),ex=id?db.fuelings.find(x=>x.id===id):null,cur=currentOdo(v);
@@ -394,12 +403,22 @@ function fuelForm(id){
     },
     onSave(){
       const date=val('f_date'),odo=num(val('f_odo')),l=num(val('f_l'));let t=num(val('f_tot'));const p=num(val('f_ppl'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(!(odo>0))return 'Zadej stav tachometru.';
       if(!(l>0))return 'Zadej počet litrů.';
       if(t==null&&p!=null)t=+(l*p).toFixed(2);
       if(t==null||isNaN(t)||t<0)return 'Zadej cenu (celkem nebo za litr).';
+      if(isNaN(odo)||isNaN(l)||(p!=null&&isNaN(p)))return 'Některé číslo je neplatné.';
       const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
+      const car=vehicleById(v)||{},tank=cnum((car.card||{}).tank);
+      const dup=live('fuelings',v).find(x=>x!==ex&&x.date===date&&Math.round(x.odo)===Math.round(odo)&&Math.abs(x.liters-l)<0.01);
+      if(dup){const w=warnOnce('dup'+date+odo,'Stejné tankování ('+fdate(date)+', '+nf(odo)+' km, '+nf(l,2)+' l) už je zapsané.');if(w)return w;}
+      if(l>(tank?tank*1.15:150)){const w=warnOnce('l'+l,nf(l,1)+' l je víc, než se vejde do nádrže'+(tank?' ('+nf(tank,1)+' l)':'')+'.');if(w)return w;}
+      if(t>0&&(t/l<15||t/l>90)){const w=warnOnce('p'+t+'/'+l,'Cena vychází na '+nf(t/l,2)+' Kč/l, to je neobvyklé.');if(w)return w;}
+      if(t===0){const w=warnOnce('z'+l,'Cena je 0 Kč.');if(w)return w;}
+      if(p!=null&&t>0&&Math.abs(l*p-t)>Math.max(2,t*0.02)){const w=warnOnce('m'+p+'/'+t,'Cena za litr ('+nf(p,2)+' Kč) nesedí s cenou celkem ('+money(t)+'), uloží se cena celkem.');if(w)return w;}
+      {const prev=sortedFuels(v).filter(x=>x!==ex&&x.date<=date).sort((a,b)=>b.date.localeCompare(a.date)||b.odo-a.odo)[0];
+       if(prev&&odo-prev.odo>3000&&(odo-prev.odo)/Math.max(1,(pd(date)-pd(prev.date))/DAY)>1500){const w=warnOnce('j'+odo,'Od minulého tankování ('+fdate(prev.date)+') by to bylo '+nf(odo-prev.odo)+' km. Zkontroluj tachometr.');if(w)return w;}}
       const rec=ex||{id:uid(),vehicleId:v};
       Object.assign(rec,{date:date,odo:Math.round(odo),liters:l,total:t,full:$('#f_full').checked,note:val('f_note').trim()});
       touch(rec);if(!ex)db.fuelings.push(rec);persist();
@@ -414,7 +433,7 @@ function odoForm(id){
    +'<div><label for="o_odo">Tachometr (km)</label><input id="o_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>',{
     onSave(){
       const date=val('o_date'),odo=num(val('o_odo'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(!(odo>0))return 'Zadej stav tachometru.';
       const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
       const rec=ex||{id:uid(),vehicleId:v};
@@ -434,12 +453,14 @@ function repairForm(id){
    +'<label for="r_shop">Dílna</label><input id="r_shop" value="'+esc(ex?ex.shop:'')+'">'
    +'<label for="r_note">Poznámka</label><input id="r_note" value="'+esc(ex?ex.note:'')+'">',{
     onSave(){
-      const title=val('r_title').trim(),date=val('r_date'),odo=num(val('r_odo')),parts=num(val('r_parts'))||0,labor=num(val('r_labor'))||0;
+      const title=val('r_title').trim(),date=val('r_date'),odo=num(val('r_odo')),parts=(x=>x==null?0:x)(num(val('r_parts'))),labor=(x=>x==null?0:x)(num(val('r_labor')));
       if(!title)return 'Zadej popis opravy.';
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(isNaN(odo)||(odo!=null&&odo<=0))return 'Neplatný stav tachometru.';
+      if(isNaN(parts)||isNaN(labor))return 'Cena musí být číslo.';
       if(parts<0||labor<0)return 'Cena nemůže být záporná.';
       if(odo!=null){const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;}
+      if(live('repairs',v).some(x=>x!==ex&&x.date===date&&x.title.trim().toLowerCase()===title.toLowerCase())){const w=warnOnce('r'+date+title,'Servis „'+title+'" se stejným datem už je zapsaný.');if(w)return w;}
       const rec=ex||{id:uid(),vehicleId:v};
       Object.assign(rec,{title:title,date:date,odo:odo!=null?Math.round(odo):null,parts:parts,labor:labor,shop:val('r_shop').trim(),note:val('r_note').trim()});
       touch(rec);if(!ex)db.repairs.push(rec);persist();
@@ -481,6 +502,9 @@ function tireForm(id){
       const brand=val('w_brand').trim(),model=val('w_model').trim(),size=val('w_size').trim(),dot=val('w_dot').replace(/\D/g,''),tread=num(val('w_tread')),kmb=num(val('w_kmb'));
       if(!brand&&!model&&!size)return 'Zadej aspoň značku, model nebo rozměr.';
       if(dot&&!/^\d{4}$/.test(dot))return 'DOT zadej jako 4 číslice: týden a rok, např. 3523.';
+      if(dot){const wk=+dot.slice(0,2),yy=+dot.slice(2),cy=new Date().getFullYear()%100,cw=Math.ceil(((new Date()-new Date(new Date().getFullYear(),0,1))/DAY+1)/7);
+        if(wk<1||wk>53)return 'Týden v DOT musí být 01 až 53.';
+        if(yy>cy||(yy===cy&&wk>cw+1))return 'DOT '+dot+' je v budoucnosti (týden '+wk+', rok 20'+dot.slice(2)+').';}
       if(isNaN(tread)||(tread!=null&&(tread<0||tread>12)))return 'Dezén zadej v mm (0 až 12).';
       if(isNaN(kmb)||(kmb!=null&&kmb<0))return 'Neplatný nájezd.';
       const rec=ex||{id:uid(),vehicleId:v,treads:[]};
@@ -502,7 +526,7 @@ function mountForm(tireId,evId,type){
     saveLabel:ex?'Uložit':(off?'Sundat':'Nasadit'),
     onSave(){
       const date=val('m_date'),odo=num(val('m_odo'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(!(odo>0))return 'Zadej stav tachometru.';
       const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
       const rec=ex||{id:uid(),vehicleId:v,tireId:tireId,type:off?'off':'on'};
@@ -516,7 +540,7 @@ function treadForm(tireId){
   openSheet('Změřit dezén: '+tireName(t),
    '<div class="two"><div><label for="d2_date">Datum</label><input id="d2_date" type="date" value="'+todayIso()+'"></div><div><label for="d2_mm">Dezén (mm)</label><input id="d2_mm" inputmode="decimal"></div></div>',{
     onSave(){const date=val('d2_date'),mm=num(val('d2_mm'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(!(mm>=0&&mm<=12))return 'Dezén zadej v mm (0 až 12).';
       (t.treads=t.treads||[]).push({date:date,mm:mm});touch(t);persist();}
   });
@@ -641,7 +665,7 @@ function doneForm(id){
     after(){const sy=()=>{$('#d_repbox').style.display=$('#d_rep').checked?'':'none';};$('#d_rep').onchange=sy;sy();},
     onSave(){
       const date=val('d_date'),odo=num(val('d_odo'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if((t.intervalKm||(isOneTime(t)&&t.dueKm!=null))&&!(odo>0))return 'Zadej stav tachometru.';
       const wr=$('#d_rep').checked,parts=num(val('d_parts'))||0,labor=num(val('d_labor'))||0;
       if(wr){
@@ -674,6 +698,22 @@ function vehicleForm(id){
     onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
   });
 }
+function validRec(k,x){
+  const isN=v=>typeof v==='number'&&isFinite(v),dOk=v=>requireDate(v);
+  if(x.deleted)return true;
+  switch(k){
+    case 'vehicles':return typeof x.name==='string'&&!!x.name.trim();
+    case 'fuelings':return dOk(x.date)&&isN(x.odo)&&isN(x.liters)&&x.liters>0&&isN(x.total)&&x.total>=0&&!!x.vehicleId;
+    case 'repairs':return dOk(x.date)&&typeof x.title==='string'&&!!x.vehicleId&&(x.odo==null||isN(x.odo));
+    case 'odos':return dOk(x.date)&&isN(x.odo)&&!!x.vehicleId;
+    case 'tasks':return typeof x.name==='string'&&!!x.vehicleId;
+    case 'fixed':return isN(x.year)&&isN(x.amount)&&!!x.vehicleId;
+    case 'tireEvents':return dOk(x.date)&&isN(x.odo)&&!!x.tireId;
+    case 'parts':return dOk(x.date)&&typeof x.name==='string'&&!!x.vehicleId;
+    case 'trips':return dOk(x.date)&&!!x.vehicleId&&(isN(x.km)||(isN(x.odoStart)&&isN(x.odoEnd)));
+    default:return !!x.vehicleId||k==='vehicles';
+  }
+}
 function mergeDb(inc){
   if(!inc||typeof inc!=='object')throw new Error('Neplatný soubor.');
   inc=JSON.parse(JSON.stringify(inc));
@@ -682,7 +722,7 @@ function mergeDb(inc){
     db[k]=db[k]||[];
     if(inc[k]!==undefined&&!Array.isArray(inc[k]))throw new Error('Neplatná data ('+k+').');
     const m=new Map(db[k].map(x=>[x.id,x]));
-    (inc[k]||[]).forEach(x=>{if(!x||!x.id)return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0)){m.set(x.id,x);n++;}});
+    (inc[k]||[]).forEach(x=>{if(!x||typeof x!=='object'||!x.id||!validRec(k,x))return;const c=m.get(x.id);if(!c||(x.updatedAt||0)>(c.updatedAt||0)){m.set(x.id,x);n++;}});
     db[k]=Array.from(m.values());
   });
   if(adoptSettings(inc.settings))n++;
@@ -729,7 +769,7 @@ function importSheet(){
   openSheet('Import dat','<p class="sub">Vlož JSON nebo vyber soubor. Data se sloučí s existujícími (novější záznam vyhrává).</p><input id="i_file" type="file"><label for="i_json">Nebo vlož text</label><textarea id="i_json"></textarea>',{
     saveLabel:'Sloučit',
     after(){$('#i_file').onchange=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=()=>{$('#i_json').value=r.result;$('#err').style.color='var(--ok)';$('#err').textContent='Soubor načten ('+f.name+'). Klepni na Sloučit.';};r.onerror=()=>{$('#err').textContent='Soubor se nepodařilo přečíst, vlož jeho text do pole níže.';};r.readAsText(f);};},
-    onSave(){try{const t=val('i_json').trim();if(!t)return 'Nic k importu.';const n=mergeDb(JSON.parse(t));if(!n)return 'Žádný nový záznam k přidání.';persist();}catch(e){return 'Import selhal: '+e.message;}}
+    onSave(){try{const t=val('i_json').trim();if(!t)return 'Nic k importu.';let js;try{js=JSON.parse(t);}catch(x){return 'Soubor není platná záloha BadCars (poškozený nebo jiný formát).';}const n=mergeDb(js);if(!n)return 'Žádný nový záznam k přidání.';persist();}catch(e){return 'Import selhal: '+e.message;}}
   });
 }
 
@@ -1014,8 +1054,10 @@ function tripForm(id){
     onSave(){
       const date=val('j_date'),os=num(val('j_os')),r=num(val('j_rate')),c=num(val('j_cons')),pr=num(val('j_price'));
       let km=num(val('j_km')),oe=num(val('j_oe'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if([os,oe,km,r,c,pr].some(x=>isNaN(x)))return 'Některé číslo je neplatné.';
+      if([r,c,pr].some(x=>x!=null&&x<0))return 'Sazba, spotřeba ani cena nemůžou být záporné.';
+      if(c!=null&&c>40)return 'Spotřeba '+nf(c,1)+' l/100 km je nereálná.';
       if(km!=null&&$('#j_rt').checked)km*=2;
       if(os!=null&&km!=null&&(oe==null||$('#j_rt').checked))oe=os+km;
       if(os!=null&&oe!=null){if(oe<os)return 'Konečný stav tachometru je nižší než počáteční.';km=oe-os;}
@@ -1175,7 +1217,7 @@ function partForm(id,cat){
     onSave(){
       const nm0=val('p_cat').trim(),mc=PART_CATS.find(x=>x[0].toLowerCase()===nm0.toLowerCase()),cat=mc?mc[0]:'Jiný díl',name=mc?mc[0]:nm0,date=val('p_date'),odo=num(val('p_odo')),lk=num(val('p_lkm')),lm=num(val('p_lmo')),pr=num(val('p_price'));
       if(!name)return 'Zadej název dílu.';
-      if(!requireDate(date))return 'Zadej datum montáže.';
+      {const de=evDate(date);if(de)return de==='Zadej datum.'?'Zadej datum montáže.':de;}
       if(isNaN(odo)||(odo!=null&&odo<0))return 'Neplatný stav tachometru.';
       if(isNaN(lk)||isNaN(lm)||(lk!=null&&lk<0)||(lm!=null&&lm<0))return 'Neplatná životnost.';
       if(isNaN(pr)||(pr!=null&&pr<0))return 'Neplatná cena.';
@@ -1215,7 +1257,7 @@ function replaceForm(id){
     after(){const sy=()=>{const o=$('#r_rep').checked;$('#r_lb').style.display=o?'':'none';$('#r_sb').style.display=o?'':'none';};$('#r_rep').onchange=sy;sy();},
     onSave(){
       const date=val('r_date'),odo=num(val('r_odo')),pr=num(val('r_price')),lb=num(val('r_labor'));
-      if(!requireDate(date))return 'Zadej datum.';
+      {const de=evDate(date);if(de)return de;}
       if(date<old.date)return 'Výměna nemůže být dřív než montáž ('+fdate(old.date)+').';
       if(isNaN(odo)||(odo!=null&&odo<0))return 'Neplatný stav tachometru.';
       if(odo!=null&&old.odo!=null&&odo<old.odo)return 'Tachometr je nižší než při montáži ('+nf(old.odo)+' km).';
