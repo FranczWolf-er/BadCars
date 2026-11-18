@@ -478,10 +478,19 @@ const CARD=[['Identifikace',[['make','Značka'],['model','Model'],['variant','Va
  ['Rozměry a hmotnosti',[['seats','Počet míst'],['dims','Délka × šířka × výška (mm)'],['wheelbase','Rozvor (mm)'],['track','Rozchod (mm)'],['weightOp','Provozní hmotnost (kg)'],['weightMax','Největší povolená hmotnost (kg)'],['axle','Povolená hmotnost na nápravu (kg)'],['trailerB','Přípojné vozidlo brzděné (kg)'],['trailerU','Přípojné vozidlo nebrzděné (kg)'],['train','Jízdní souprava (kg)'],['tow','Tažné zařízení'],['maxSpeed','Nejvyšší rychlost (km/h)']]],
  ['Technické údaje',[['tank','Objem nádrže (l)'],['tpCons','Spotřeba dle TP (l/100 km)'],['tires','Pneumatiky (rozměr)'],['tiresAlt','Povolené alternativy'],['rims','Ráfky'],['oil','Motorový olej (typ)'],['oilVol','Objem oleje (l)'],['coolant','Chladicí kapalina'],['brake','Brzdová kapalina'],['battery','Autobaterie'],['wipers','Stěrače (rozměry)']]],
  ['Pořízení a prodej',[['buyPrice','Pořizovací cena (Kč)'],['buyDate','Datum pořízení','date'],['buyOdo','Stav tachometru při koupi (km)'],['curValue','Odhad současné hodnoty (Kč)'],['sellPrice','Prodejní cena (Kč)'],['sellDate','Datum prodeje','date']]],
- ['Pojištění',[['insurer','Pojišťovna'],['policy','Číslo smlouvy'],['insPov','Povinné ručení platné do','date'],['insHav','Havarijní pojištění platné do','date']]],
+ ['Pojištění',[['insurer','Pojišťovna'],['policy','Číslo smlouvy'],['insPov','Povinné ručení platné do','date'],['insHav','Havarijní pojištění platné do','date'],['insAnn','Výročí povinného ručení','date'],['havAnn','Výročí havarijního pojištění','date']]],
+ ['Termíny a výbava',[['vignette','Dálniční známka platná do','date'],['kit','Lékárnička – expirace','date'],['extDate','Jiný termín – datum','date'],['extName','Jiný termín – název']]],
  ['Poznámky',[['note','Poznámka']]]];
-const INS=[['insPov','Povinné ručení'],['insHav','Havarijní pojištění']];
-function insInfo(c){return INS.filter(i=>c&&c[i[0]]).map(i=>{const d=Math.round((pd(c[i[0]])-pd(todayIso()))/DAY);return {key:i[0],name:i[1],date:c[i[0]],days:d,status:d<0?'late':(d<=cfg().days?'soon':'ok')};});}
+const INS=[['insPov','Povinné ručení','exp'],['insHav','Havarijní pojištění','exp'],['vignette','Dálniční známka','exp'],['kit','Lékárnička','exp'],['extDate','','exp'],['insAnn','Výročí povinného ručení','ann'],['havAnn','Výročí havarijního pojištění','ann']];
+const NOTICE_DAYS=42;
+function nextAnn(d){const t=todayIso(),y=+t.slice(0,4);let n=y+d.slice(4);if(!requireDate(n))n=y+'-02-28';if(n<t){n=(y+1)+d.slice(4);if(!requireDate(n))n=(y+1)+'-02-28';}return n;}
+function insInfo(c){const C=cfg();return INS.filter(i=>c&&c[i[0]]&&requireDate(c[i[0]])).map(i=>{
+  const name=i[0]==='extDate'?(c.extName||'Jiný termín'):i[1];
+  if(i[2]==='ann'){const nx=nextAnn(c[i[0]]),d=Math.round((pd(nx)-pd(todayIso()))/DAY),nd=addD0(nx,-NOTICE_DAYS),dn=Math.round((pd(nd)-pd(todayIso()))/DAY);
+    return {key:i[0],name:name,date:nx,days:d,ann:true,notice:nd,noticeDays:dn,status:d<=Math.max(C.days,NOTICE_DAYS+14)?'soon':'ok'};}
+  const d=Math.round((pd(c[i[0]])-pd(todayIso()))/DAY);return {key:i[0],name:name,date:c[i[0]],days:d,status:d<0?'late':(d<=C.days?'soon':'ok')};});}
+function addD0(d,n){const x=pd(d);x.setDate(x.getDate()+n);return isoD(x);}
+const insText=x=>x.ann?'výročí '+fdate(x.date)+' (za '+nf(x.days)+' dní)'+(x.noticeDays>=0?' · případná výpověď do '+fdate(x.notice):' · na výpověď k tomuto výročí už je pozdě'):'platné do '+fdate(x.date)+(x.days<0?' (před '+nf(-x.days)+' dny)':' (za '+nf(x.days)+' dní)');
 function cardForm(){
   const v=vid(),car=vehicleById(v),c=car.card||{};
   let body='<label for="k_name">Název auta</label><input id="k_name" value="'+esc(car.name)+'"><label for="k_plate">SPZ</label><input id="k_plate" value="'+esc(car.plate||'')+'">';
@@ -1017,8 +1026,8 @@ function viewHome(v){
   h+=tileEdit?'<div class="actions" style="margin-top:8px"><button class="btn primary" data-act="tiles-done">Hotovo</button><button class="btn" data-act="tiles-reset">Výchozí sada</button></div>'
     :'<div class="actions" style="margin-top:8px"><button class="btn" data-act="edit-tiles">✎ Upravit ukazatele</button><button class="btn" data-act="help-mode" aria-pressed="'+helpMode+'" aria-label="Jak se ukazatele počítají" title="Jak se ukazatele počítají" style="flex:0 0 auto;min-width:48px;font-weight:700">?</button></div>';
   const tasks=live('tasks',v).filter(t=>!t.done).map(t=>taskRow(t,cur,daily)).filter(x=>x.info.status!=='ok').sort(taskCmp);
-  const ins=insInfo((vehicleById(v)||{}).card).filter(x=>x.status!=='ok');
-  const insHtml=ins.map(x=>'<button class="row" data-act="edit-card"><div class="r1"><b>'+x.name+'</b><span class="chip '+x.status+'">'+(x.status==='late'?'⚠ Vypršelo':'● Brzy')+'</span></div><div class="r2">platné do '+fdate(x.date)+(x.days<0?' (před '+nf(-x.days)+' dny)':' (za '+nf(x.days)+' dní)')+'</div></button>').join('');
+  const ins=insInfo((vehicleById(v)||{}).card).filter(x=>x.status!=='ok').sort((a,b)=>(a.status==='late'?0:1)-(b.status==='late'?0:1)||a.days-b.days);
+  const insHtml=ins.map(x=>'<button class="row" data-act="edit-card"><div class="r1"><b>'+x.name+'</b><span class="chip '+x.status+'">'+(x.status==='late'?'⚠ Vypršelo':(x.ann?'● Výročí':'● Brzy'))+'</span></div><div class="r2">'+insText(x)+'</div></button>').join('');
   h+='<h2>Pozor na</h2>';
   if(insHtml)h+='<div class="list">'+insHtml+'</div>';
   if(insHtml&&!tasks.length){}else h+=tasks.length?'<div class="list">'+tasks.map(x=>x.html).join('')+'</div>':'<div class="empty">'+(live('tasks',v).filter(t=>!t.done).length?'Nic nehoří, všechny úkony jsou v pořádku.':'Zatím žádné periodické úkony.')+'</div>';
@@ -1390,7 +1399,7 @@ function viewCar(v){
   h+='<h2>Vozidlo</h2><div class="card"><div class="kv"><span>Název</span><b>'+esc(car.name)+'</b></div>'+(car.plate?'<div class="kv"><span>SPZ</span><b>'+esc(car.plate)+'</b></div>':'')+(car.startOdo!=null?'<div class="kv"><span>Počáteční stav</span><b>'+nf(car.startOdo)+' km</b></div>':'')+'</div>';
   let any=false;
   CARD.forEach(g=>{const rows=g[1].filter(f=>c[f[0]]);if(!rows.length)return;any=true;
-    h+='<h2>'+g[0]+'</h2><div class="card">'+rows.map(f=>{const ii=f[2]==='date'?insInfo(c).find(x=>x.key===f[0]):null;return '<div class="kv"><span>'+f[1]+'</span><b>'+(ii?fdate(ii.date)+' <span class="chip '+ii.status+'">'+(ii.days<0?'vypršelo':'za '+nf(ii.days)+' dní')+'</span>':(f[2]==='date'?fdate(c[f[0]]):esc(c[f[0]])))+'</b></div>';}).join('')+'</div>';});
+    h+='<h2>'+g[0]+'</h2><div class="card">'+rows.map(f=>{const ii=f[2]==='date'?insInfo(c).find(x=>x.key===f[0]):null;return '<div class="kv"><span>'+f[1]+'</span><b>'+(ii?(ii.ann?fdate(c[f[0]])+' <span class="chip '+ii.status+'">další '+fdate(ii.date)+'</span>':fdate(ii.date)+' <span class="chip '+ii.status+'">'+(ii.days<0?'vypršelo':'za '+nf(ii.days)+' dní')+'</span>'):(f[2]==='date'?fdate(c[f[0]]):esc(c[f[0]])))+'</b></div>';}).join('')+'</div>';});
   if(!any)h+='<div class="empty" style="margin-top:10px">Klepni na Upravit kartu a doplň VIN, motor, pneumatiky, oleje…</div>';
   return h;
 }
