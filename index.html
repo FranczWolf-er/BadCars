@@ -749,7 +749,6 @@ function settingsSheet(){
    +vs.map(v=>'<button type="button" class="row" data-act="edit-veh" data-id="'+v.id+'"><div class="r1"><b>'+esc(v.name)+'</b><span>'+esc(v.plate||'')+'</span></div></button>').join('')
    +'</div><div class="actions"><button type="button" class="btn" data-act="new-veh">+ Přidat auto</button>'+(demoIds().length?'<button type="button" class="btn danger" data-act="demo-del">Smazat ukázkové auto</button>':'<button type="button" class="btn" data-act="demo-add">+ Ukázkové auto</button>')+'</div>'+(demoIds().length?'<p class="sub" style="margin:0">Ukázkové auto se nezálohuje do cloudu.</p>':'')
    +'<h2>Záloha do cloudu</h2>'+cloudPanel()+'<p class="sub" id="syncinfo">'+infoText(syncSt)+'</p>'+fileSection()+''
-   +'<h2>Registr vozidel</h2><p class="sub" style="margin:0">API klíč pro načítání údajů z registru podle VIN: '+((db.settings||{}).dkKey?'<b>uložený</b> <button type="button" class="btn" data-act="dk-clear" style="padding:2px 10px">Smazat</button>':'nezadaný (zadáš ho při prvním načtení na kartě vozidla)')+'</p>'
    +'<h2>Upozornění v úkonech</h2><p class="sub" style="margin:0">Úkon je „Brzy", když do termínu zbývá méně než zadaný počet dní, nebo méně než zadané km. Po termínu je od překročení. Platí i pro pojištění.</p>'
    +'<div class="two"><div><label for="s_days">Brzy: dní předem</label><input id="s_days" inputmode="numeric" value="'+cfg().days+'"></div><div><label for="s_pct">Brzy: % intervalu v km</label><input id="s_pct" inputmode="numeric" value="'+cfg().kmPct+'"></div></div>'
    +'<label for="s_dayone">Brzy u jednorázových úkonů: dní předem</label><input id="s_dayone" inputmode="numeric" value="'+cfg().daysOne+'">'
@@ -1390,46 +1389,163 @@ function viewTimeline(v){
   h+='<p class="sub" style="margin:10px 2px 0">'+nf(ev.length)+(ev.length===1?' událost':(ev.length<5?' události':' událostí'))+'. Klepnutím na událost ji otevřeš a upravíš.</p>';
   return h;
 }
-/* ---------- registr silničních vozidel (Datová kostka, veřejné API MD ČR) ---------- */
-const REG_API='https://api.dataovozidlech.cz/api/vehicletechnicaldata/v2';
-const regVal=x=>x==null?'':(typeof x==='object'?JSON.stringify(x):String(x)).trim();
-const regLabel=k=>k.replace(/([a-z])([A-Z])/g,'$1 $2').replace(/^./,m=>m.toUpperCase());
-const regDate=x=>{const t=regVal(x).slice(0,10);return /^\d{4}-\d{2}-\d{2}$/.test(t)?t:'';};
-function regPick(D,res){const ks=Object.keys(D);for(const re of res){const k=ks.find(k=>re.test(k)&&regVal(D[k])!=='');if(k)return D[k];}return null;}
-const REG_MAP=[
- ['make',[/^TovarniZnacka$/i]],['model',[/^ObchodniOznaceni$/i,/^Typ$/i]],['variant',[/^(Varianta|Verze)$/i]],['vin',[/^VIN$/i]],
- ['year',[/RokVyroby/i],x=>(regVal(x).match(/\d{4}/)||[''])[0]],
- ['reg1',[/^DatumPrvniRegistrace$/i],regDate],['regCz',[/DatumPrvniRegistraceVCr/i],regDate],['stkTo',[/PravidelnaTechnickaProhlidkaDo/i],regDate],
- ['fuel',[/^Palivo$/i,/Palivo/i]],['power',[/MotorMaxVykon/i],x=>(regVal(x).match(/[\d.,]+/)||[''])[0]],['displ',[/MotorZdvihObjem/i]],['engType',[/^MotorTyp$/i,/MotorTyp/i]],
- ['color',[/BarvaZakladni/i,/Barva/i]],['body',[/KaroserieDruh/i,/Karoserie/i]],['emis',[/EmisniUroven|EmiseKategorie|EmiseEHK/i]],
- ['seats',[/PocetMistCelkem|MistCelkem/i,/PocetMist/i]],['dims',[/^Rozmery$/i],x=>regVal(x).replace(/\s*\/\s*/g,' × ')],['wheelbase',[/Rozvor/i]],['track',[/Rozchod/i]],
- ['weightOp',[/HmotnostiProvozni|HmotnostProvozni/i]],['weightMax',[/HmotnostiPripPov$|PripustnaCelkova|NejvetsiTechnickyPripustna|HmotnostiPripPovolena/i]],
- ['trailerB',[/PripojneBrzdene|Brzdene/i]],['trailerU',[/PripojneNebrzdene|Nebrzdene/i]],['train',[/Souprava/i]],['maxSpeed',[/NejvyssiRychlost/i]],
- ['tires',[/NapravyPneuRafky|Pneumatik|PneuRafky/i]],['tpCons',[/SpotrebaNa100Km|Spotreba/i]]];
-function regMapped(D){const o={};REG_MAP.forEach(m=>{const raw=regPick(D,m[1]);if(raw==null)return;const vv=m[2]?m[2](raw):regVal(raw);if(vv!=='')o[m[0]]=String(vv);});return o;}
-const cardLabel=k=>{for(const g of CARD)for(const f of g[1])if(f[0]===k)return f[1];return k;};
-async function regLoad(){
-  const v=vid(),car=vehicleById(v),c=car.card||{},key=((db.settings||{}).dkKey||'').trim(),vin=(c.vin||'').trim().toUpperCase();
-  if(!key){openSheet('Načíst z registru','<p>Pro dotaz do registru je potřeba bezplatný API klíč Ministerstva dopravy.</p><ol style="padding-left:18px;line-height:1.5"><li>Zaregistruj se na <b>dataovozidlech.cz/registraceapi</b> (jméno a e-mail).</li><li>Klíč přijde e-mailem.</li><li>Vlož ho sem. Uloží se jen v tvých datech (a v záloze), ne v kódu aplikace.</li></ol><label for="dk_key">API klíč</label><input id="dk_key" autocomplete="off">',{saveLabel:'Uložit a načíst',onSave(){const k=val('dk_key').trim();if(k.length<8)return 'Vlož celý klíč z e-mailu.';saveSettings({dkKey:k});setTimeout(regLoad,50);}});return;}
-  if(!/^[A-HJ-NPR-Z0-9]{11,17}$/.test(vin)){openSheet('Načíst z registru','<p>Na kartě vozidla chybí VIN (nebo je neplatný). Doplň ho v Upravit kartu.</p>',{saveLabel:'Zavřít'});return;}
-  toast('Načítám z registru…');
-  let j;
-  try{const r=await fetch(REG_API+'?vin='+encodeURIComponent(vin),{headers:{API_KEY:key}});
-    const t=await r.text();try{j=JSON.parse(t);}catch(e){j=null;}
-    if(r.status===401||r.status===403){openSheet('Načíst z registru','<p>Registr odmítl API klíč. Zkontroluj ho, případně ho zadej znovu.</p>',{saveLabel:'Zadat klíč znovu',onSave(){saveSettings({dkKey:''});setTimeout(regLoad,50);}});return;}
-    if(!r.ok||!j){openSheet('Načíst z registru','<p>Registr vrátil chybu ('+r.status+'). '+esc((j&&j.Message)||t.slice(0,160))+'</p>',{saveLabel:'Zavřít'});return;}
-  }catch(e){openSheet('Načíst z registru','<p>Spojení s registrem se nepodařilo.</p><p class="sub">Buď nejsi online, nebo registr nedovoluje dotazy přímo z webové aplikace v prohlížeči (CORS). V tom případě je potřeba malý prostředník (proxy) – dej vědět, připravíme ho.</p><p class="sub">Technicky: '+esc(e.message||String(e))+'</p>',{saveLabel:'Zavřít'});return;}
-  const D=j.Data||j.data||null;
-  if(!D||typeof D!=='object'||!Object.keys(D).length){openSheet('Načíst z registru','<p>Vozidlo s VIN <b>'+esc(vin)+'</b> registr nenašel.</p>',{saveLabel:'Zavřít'});return;}
-  regDiff(car,D);
+/* ---------- aktualizace karty z PDF výpisu (eTechničák / Datová kostka) ---------- */
+// Minimal PDF text extractor for wkhtmltopdf/Qt PDFs (FlateDecode, Type0 Identity-H + ToUnicode). inflate(bytes)->Promise<bytes>
+async function pdfTextItems(buf,inflate){
+  const B=new Uint8Array(buf),latin=s=>{let o='';for(let i=0;i<s.length;i++)o+=String.fromCharCode(s[i]);return o;};
+  const S=latin(B);
+  const objs={};const re=/(\d+)\s+(\d+)\s+obj\b/g;let m;
+  while((m=re.exec(S))){const st=m.index+m[0].length,en=S.indexOf('endobj',st);if(en<0)break;objs[m[1]]={s:st,e:en};re.lastIndex=en;}
+  const dictOf=n=>{const o=objs[n];if(!o)return '';const t=S.slice(o.s,o.e),k=t.indexOf('stream');return k>=0?t.slice(0,k):t;};
+  const streamOf=async n=>{const o=objs[n];if(!o)return null;const t=S.slice(o.s,o.e);let k=t.indexOf('stream');if(k<0)return null;k+=6;if(t[k]==='\r')k++;if(t[k]==='\n')k++;
+    let end=t.lastIndexOf('endstream');let raw=B.subarray(o.s+k,o.s+end);const d=t.slice(0,k);
+    const lm=/\/Length\s+(\d+)(\s+\d+\s+R)?/.exec(d);if(lm&&!lm[2]){raw=B.subarray(o.s+k,o.s+k+(+lm[1]));}
+    else if(lm&&lm[2]){const ln=/(\d+)/.exec(S.slice(objs[lm[1]].s,objs[lm[1]].e));if(ln)raw=B.subarray(o.s+k,o.s+k+(+ln[1]));}
+    if(/FlateDecode/.test(d)){try{return latin(await inflate(raw));}catch(e){return null;}}return latin(raw);};
+  const ref=(d,key)=>{const r=new RegExp('/'+key+'\\s+(\\d+)\\s+\\d+\\s+R').exec(d);return r?r[1]:null;};
+  // cmaps
+  const parseCMap=t=>{const map={};const hx=h=>{let o='';for(let i=0;i+3<h.length+0;i+=4)o+=String.fromCharCode(parseInt(h.substr(i,4),16));if(h.length===2)o=String.fromCharCode(parseInt(h,16));return o;};
+    let b;const bc=/beginbfchar([\s\S]*?)endbfchar/g;while((b=bc.exec(t))){const p=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/g;let q;while((q=p.exec(b[1])))map[parseInt(q[1],16)]=hx(q[2]);}
+    const br=/beginbfrange([\s\S]*?)endbfrange/g;while((b=br.exec(t))){const p=/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*(<([0-9A-Fa-f]+)>|\[([^\]]*)\])/g;let q;
+      while((q=p.exec(b[1]))){const a=parseInt(q[1],16),z=parseInt(q[2],16);if(q[4]){let base=parseInt(q[4],16);for(let c=a;c<=z;c++)map[c]=String.fromCharCode(base+(c-a));}else{const arr=q[5].match(/<([0-9A-Fa-f]+)>/g)||[];for(let c=a;c<=z;c++){const h=arr[c-a];if(h)map[c]=hx(h.slice(1,-1));}}}}
+    return map;};
+  const fontCache={};
+  const fontMap=async fn=>{if(fontCache[fn])return fontCache[fn];const d=dictOf(fn);const tu=ref(d,'ToUnicode');let map=null;if(tu){const t=await streamOf(tu);if(t)map=parseCMap(t);}
+    const two=/Identity-H|Type0/.test(d);return fontCache[fn]={map:map,two:two};};
+  // pages
+  const pages=Object.keys(objs).filter(n=>/\/Type\s*\/Page\b/.test(dictOf(n))).sort((a,b)=>a-b);
+  const out=[];let pageNo=0;
+  for(const pn of pages){pageNo++;const pd=dictOf(pn);
+    let resD=pd;const rr=ref(pd,'Resources');if(rr)resD=dictOf(rr);
+    let fontsD='';const fm=/\/Font\s*<<([\s\S]*?)>>/.exec(resD);if(fm)fontsD=fm[1];else{const fr=ref(resD,'Font');if(fr)fontsD=dictOf(fr);}
+    const fonts={};let q;const fr2=/\/([\w.+-]+)\s+(\d+)\s+\d+\s+R/g;while((q=fr2.exec(fontsD)))fonts[q[1]]=q[2];
+    let cs=[];const cm=/\/Contents\s*(\[([^\]]*)\]|(\d+)\s+\d+\s+R)/.exec(pd);if(cm){if(cm[3])cs=[cm[3]];else cs=(cm[2].match(/(\d+)\s+\d+\s+R/g)||[]).map(x=>x.split(/\s+/)[0]);}
+    let content='';for(const c of cs){const t=await streamOf(c);if(t)content+='\n'+t;}
+    // tokenize
+    let i=0,ctm=[1,0,0,1,0,0],stack=[],tm=[1,0,0,1,0,0],tlm=[1,0,0,1,0,0],font=null,fsz=1,lead=0;const ops=[];
+    const mul=(a,b)=>[a[0]*b[0]+a[1]*b[2],a[0]*b[1]+a[1]*b[3],a[2]*b[0]+a[3]*b[2],a[2]*b[1]+a[3]*b[3],a[4]*b[0]+a[5]*b[2]+b[4],a[4]*b[1]+a[5]*b[3]+b[5]];
+    const L=content.length;const args=[];
+    const decode=async(str,isHex)=>{if(!font)return '';const f=await fontMap(fonts[font]);let codes=[];
+      if(isHex){const h=str.replace(/\s/g,'');if(f.two){for(let k=0;k+3<h.length+0;k+=4)codes.push(parseInt(h.substr(k,4),16));}else for(let k=0;k<h.length;k+=2)codes.push(parseInt(h.substr(k,2),16));}
+      else{const bs=[];for(let k=0;k<str.length;k++)bs.push(str.charCodeAt(k));if(f.two){for(let k=0;k+1<bs.length;k+=2)codes.push(bs[k]*256+bs[k+1]);}else codes=bs;}
+      return codes.map(c=>f.map&&f.map[c]!=null?f.map[c]:(f.two?'':String.fromCharCode(c))).join('');};
+    const emit=async(txt)=>{if(!txt)return;const m2=mul(tm,ctm);out.push({p:pageNo,x:m2[4],y:m2[5],s:Math.abs(fsz*m2[3])||fsz,t:txt});};
+    while(i<L){const ch=content[i];
+      if(/\s/.test(ch)){i++;continue;}
+      if(ch==='%'){while(i<L&&content[i]!=='\n')i++;continue;}
+      if(ch==='('){let d=0,s='';i++;while(i<L){const c=content[i];if(c==='\\'){const n=content[i+1];const esc={n:'\n',r:'\r',t:'\t',b:'\b',f:'\f','(':'(',')':')','\\':'\\'};if(esc[n]!==undefined){s+=esc[n];i+=2;continue;}if(/[0-7]/.test(n)){let o='';let k=i+1;while(k<i+4&&/[0-7]/.test(content[k]))o+=content[k++];s+=String.fromCharCode(parseInt(o,8));i=k;continue;}i+=2;continue;}
+          if(c==='(')d++;if(c===')'){if(d===0){i++;break;}d--;}s+=c;i++;}args.push({str:s,hex:false});continue;}
+      if(ch==='<'&&content[i+1]!=='<'){const e=content.indexOf('>',i);args.push({str:content.slice(i+1,e),hex:true});i=e+1;continue;}
+      if(ch==='<'&&content[i+1]==='<'){let d=0;while(i<L){if(content.startsWith('<<',i)){d++;i+=2;continue;}if(content.startsWith('>>',i)){d--;i+=2;if(!d)break;continue;}i++;}args.push({dict:1});continue;}
+      if(ch==='['){const e=(()=>{let k=i+1,d=0;while(k<L){const c=content[k];if(c==='('){let dd=0;k++;while(k<L){if(content[k]==='\\'){k+=2;continue;}if(content[k]==='(')dd++;if(content[k]===')'){if(!dd)break;dd--;}k++;}k++;continue;}if(c==='[')d++;if(c===']'){if(!d)return k;d--;}k++;}return k;})();
+        const inner=content.slice(i+1,e);const parts=[];const pr=/\((?:\\.|[^\\)])*\)|<[0-9A-Fa-f\s]*>|-?[\d.]+/g;let pm;while((pm=pr.exec(inner))){const x=pm[0];if(x[0]==='(')parts.push({str:x.slice(1,-1).replace(/\\([()\\])/g,'$1'),hex:false});else if(x[0]==='<')parts.push({str:x.slice(1,-1),hex:true});else parts.push({num:+x});}
+        args.push({arr:parts});i=e+1;continue;}
+      if(ch==='/'){let k=i+1;while(k<L&&!/[\s\/\[\]<>()]/.test(content[k]))k++;args.push({name:content.slice(i+1,k)});i=k;continue;}
+      if(/[-+.\d]/.test(ch)){let k=i;while(k<L&&/[-+.\d]/.test(content[k]))k++;args.push({num:+content.slice(i,k)});i=k;continue;}
+      let k=i;while(k<L&&!/[\s\/\[\]<>()%]/.test(content[k]))k++;const op=content.slice(i,k);i=k;
+      const n=a=>args[args.length-a]&&args[args.length-a].num;
+      switch(op){
+        case 'q':stack.push(ctm.slice());break;case 'Q':ctm=stack.pop()||[1,0,0,1,0,0];break;
+        case 'cm':ctm=mul([n(6),n(5),n(4),n(3),n(2),n(1)],ctm);break;
+        case 'BT':tm=[1,0,0,1,0,0];tlm=tm.slice();break;
+        case 'Tf':font=args[args.length-2]&&args[args.length-2].name;fsz=n(1);break;
+        case 'TL':lead=n(1);break;
+        case 'Td':tlm=mul([1,0,0,1,n(2),n(1)],tlm);tm=tlm.slice();break;
+        case 'TD':lead=-n(1);tlm=mul([1,0,0,1,n(2),n(1)],tlm);tm=tlm.slice();break;
+        case 'Tm':tlm=[n(6),n(5),n(4),n(3),n(2),n(1)];tm=tlm.slice();break;
+        case 'T*':tlm=mul([1,0,0,1,0,-lead],tlm);tm=tlm.slice();break;
+        case 'Tj':case "'":case '"':{if(op!=='Tj'){tlm=mul([1,0,0,1,0,-lead],tlm);tm=tlm.slice();}const a=args[args.length-1];if(a&&a.str!=null)await emit(await decode(a.str,a.hex));break;}
+        case 'TJ':{const a=args[args.length-1];if(a&&a.arr){let s='';for(const p of a.arr){if(p.str!=null)s+=await decode(p.str,p.hex);else if(p.num<-200)s+=' ';}await emit(s);}break;}
+      }
+      args.length=0;
+    }
+  }
+  return out;
 }
-function regDiff(car,D){
-  const c=car.card||{},m=regMapped(D),nrm=x=>regVal(x).toLowerCase().replace(/\s+/g,' '),keys=Object.keys(m).filter(k=>nrm(c[k])!==nrm(m[k]));
-  const body=(keys.length?'<p class="sub" style="margin:0 0 8px">Zaškrtnuté údaje se přepíšou podle registru. Ostatní zůstanou, jak jsou.</p>'+keys.map(k=>'<label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" data-rk="'+k+'"'+(regVal(c[k])===''?' checked':'')+'><span><b>'+esc(cardLabel(k))+'</b><br><span class="sub">'+(regVal(c[k])?esc(c[k])+' → ':'(prázdné) → ')+'<b>'+esc(m[k])+'</b></span></span></label>').join('')
-    :'<p>Údaje na kartě odpovídají registru, nic se nezměnilo.</p>')+'<p class="sub">Registr je k dispozici z veřejného API Ministerstva dopravy (Datová kostka). Všechny údaje z registru najdeš dole na kartě.</p>';
-  openSheet('Údaje z registru',body,{saveLabel:keys.length?'Přepsat vybrané':'Zavřít',
+
+
+function pdfRows(items){
+  const pages={};items.forEach(it=>{(pages[it.p]=pages[it.p]||[]).push(it);});
+  const rows=[];
+  Object.keys(pages).sort((a,b)=>a-b).forEach(p=>{
+    const its=pages[p];
+    // value column = most common start x of glyph runs right of 150
+    const xs={};its.forEach(it=>{if(it.x>150)xs[Math.round(it.x)]=(xs[Math.round(it.x)]||0)+1;});
+    const vx=+Object.keys(xs).sort((a,b)=>xs[b]-xs[a])[0]||300;
+    const lines=[];its.slice().sort((a,b)=>b.y-a.y||a.x-b.x).forEach(it=>{let l=lines.find(l=>Math.abs(l.y-it.y)<2);if(!l){l={y:it.y,its:[]};lines.push(l);}l.its.push(it);});
+    lines.sort((a,b)=>b.y-a.y);
+    let cur=null,prevY=null;
+    lines.forEach(l=>{l.its.sort((a,b)=>a.x-b.x);const lab=l.its.filter(i=>i.x<vx-3).map(i=>i.t).join('').replace(/\s+/g,' ').trim(),val=l.its.filter(i=>i.x>=vx-3).map(i=>i.t).join('').replace(/\s+/g,' ').trim();
+      if(!lab&&!val)return;
+      if(!cur||prevY-l.y>15){cur={lab:[],val:[]};rows.push(cur);}
+      if(lab)cur.lab.push(lab);if(val)cur.val.push(val);prevY=l.y;});
+  });
+  return rows.map(r=>({label:r.lab.join(' '),value:r.val.join(' ').replace(/\s+/g,' ').trim()})).filter(r=>r.label&&!/^údaje o v/i.test(r.label));
+}
+const regNorm=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+function regFromRows(rows){
+  const R={};rows.forEach(r=>{R[regNorm(r.label)]=r.value;});
+  const get=(...keys)=>{for(const k of keys){const kk=Object.keys(R).find(x=>typeof k==='string'?x===k:k.test(x));if(kk&&R[kk])return R[kk];}return '';};
+  const iso=s=>{const m=/(\d{1,2})\.(\d{1,2})\.(\d{4})/.exec(s||'');return m?m[3]+'-'+m[2].padStart(2,'0')+'-'+m[1].padStart(2,'0'):'';};
+  const nums=s=>(String(s||'').replace(/(\d)\s+(?=\d{3}\b)/g,'$1').match(/\d+(?:[.,]\d+)?/g)||[]);
+  const cap=s=>s?s.charAt(0).toUpperCase()+s.slice(1).toLowerCase():'';
+  const dec=s=>String(s).replace('.',',');
+  const o={};
+  const put=(k,v)=>{if(v!=null&&String(v).trim()!=='')o[k]=String(v).trim();};
+  put('reg1',iso(get('datum 1. registrace')));put('regCz',iso(get('datum 1. registrace v čr')));put('stkTo',iso(get('pravidelná technická prohlídka do')));
+  put('ztp',get('ztp'));put('orv',get('číslo orv'));
+  put('make',cap(get('tovární značka')));put('model',get('obchodní označení')?get('obchodní označení').split(' ').map(w=>w.length<=3?w:cap(w)).join(' '):'');put('variant',get('varianta'));put('vin',get('vin').replace(/\s/g,''));
+  put('engine',get('číslo motoru'));put('engType',get('typ motoru'));
+  {const p=nums(get(/^max\. výkon/));put('power',p[0]);}
+  {const f=get('palivo');const F={BA:'Benzín (BA)',NM:'Nafta (NM)',LPG:'LPG',CNG:'CNG',EL:'Elektřina'};put('fuel',F[f]||f);}
+  put('displ',nums(get(/^zdvihový objem/))[0]);
+  {const e=get('stupeň plnění emisní úrovně');put('emis',e?e.replace(/^EURO\s*/i,'Euro '):'');}
+  {const c=get(/^spotřeba město\/mimo město\/kombinovaná/).split('/').map(x=>x.trim());const L=['město','mimo město','kombinovaná'];const parts=c.map((x,i)=>x?L[i]+' '+dec(x):'').filter(Boolean);put('tpCons',parts.join(' · '));}
+  put('color',cap(get('barva')));
+  {const d1=get('druh vozidla'),d2=get('druh (typ)'),k=get('kategorie vozidla');put('body',[cap(d1),d2?d2.toLowerCase():''].filter(Boolean).join(', ')+(k?' ('+k+')':''));}
+  put('seats',nums(get(/^počet míst celkem/))[0]);
+  {const d=nums(get(/^celková délka\/šířka\/výška/));put('dims',d.length?d.join(' × '):'');}
+  put('wheelbase',nums(get(/^rozvor/))[0]);
+  {const t=nums(get(/^rozchod/));put('track',t.join(' / '));}
+  put('weightOp',nums(get('provozní hmotnost'))[0]);
+  {const w=nums(get(/^největší technicky přípustná\/povolená hmotnost \[kg\]$/));put('weightMax',w[1]||w[0]);}
+  {const a=get(/hmotnost na nápravu/).split(';').map(x=>nums(x)).filter(x=>x.length).map(x=>x[1]||x[0]);put('axle',a.join(' / '));}
+  {const w=nums(get(/přípojného vozidla \[kg\] brzděného$/));put('trailerB',w[1]||w[0]);}
+  {const w=nums(get(/přípojného vozidla \[kg\] nebrzděného$/));put('trailerU',w[1]||w[0]);}
+  {const w=nums(get(/jízdní soupravy/));put('train',w[1]||w[0]);}
+  {const t=get(/^spojovací zařízení/);put('tow',t?cap(t.split(' ')[0])+t.slice(t.indexOf(' ')):'');}
+  put('maxSpeed',nums(get(/^nejvyšší rychlost/))[0]);
+  {const k=get(/^kola a pneumatiky/).split(';')[0]||'';const pr=k.split('/');if(pr.length>=3){const tire=(pr[0]+'/'+pr[1]).replace(/\s*R\s*(\d)/,' R$1').replace(/\s+/g,' ').trim(),rim=pr.slice(2).join('/').trim().replace(/\s*X\s*/i,' × ');put('tires',tire);put('rims',rim);}}
+  return o;
+}
+
+
+const regVal=x=>x==null?'':(typeof x==='object'?JSON.stringify(x):String(x)).trim();
+const cardLabel=k=>{for(const g of CARD)for(const f of g[1])if(f[0]===k)return f[1];return k;};
+async function pdfInflate(bytes){
+  const run=async fmt=>{const ds=new DecompressionStream(fmt),w=ds.writable.getWriter();w.write(bytes).catch(()=>{});w.close().catch(()=>{});return new Uint8Array(await new Response(ds.readable).arrayBuffer());};
+  try{return await run('deflate');}catch(e){return await run('deflate-raw');}
+}
+function regPdfPick(){
+  const inp=document.createElement('input');inp.type='file';inp.accept='application/pdf,.pdf';
+  inp.onchange=async()=>{const f=inp.files&&inp.files[0];if(!f)return;
+    if(typeof DecompressionStream==='undefined'){openSheet('Aktualizace z PDF','<p>Tento prohlížeč neumí číst PDF. Aktualizuj prosím systém nebo prohlížeč.</p>',{saveLabel:'Zavřít'});return;}
+    toast('Čtu PDF…');
+    try{const buf=await f.arrayBuffer();const head=new TextDecoder('latin1').decode(new Uint8Array(buf.slice(0,5)));if(head!=='%PDF-')throw new Error('Soubor není PDF.');
+      const rows=pdfRows(await pdfTextItems(buf,pdfInflate));
+      if(!rows.length||!rows.some(r=>/^vin$/i.test(r.label.trim())))throw new Error('V PDF jsem nenašel údaje o vozidle. Použij výpis „Údaje o vozidle" z eTechničáku nebo dataovozidlech.cz.');
+      regDiff(vehicleById(vid()),regFromRows(rows),rows,f.name);
+    }catch(e){openSheet('Aktualizace z PDF','<p>'+esc(e.message||String(e))+'</p>',{saveLabel:'Zavřít'});}};
+  inp.click();
+}
+function regDiff(car,m,rows,fname){
+  const c=car.card||{},nrm=x=>regVal(x).toLowerCase().replace(/\s+/g,' '),keys=Object.keys(m).filter(k=>nrm(c[k])!==nrm(m[k]));
+  const body=(keys.length?'<p class="sub" style="margin:0 0 8px">Zaškrtnuté údaje se přepíšou podle výpisu. Ostatní zůstanou, jak jsou.</p>'+keys.map(k=>'<label class="chk" style="display:flex;gap:8px;align-items:flex-start;margin:8px 0"><input type="checkbox" data-rk="'+k+'"'+(regVal(c[k])===''?' checked':'')+'><span><b>'+esc(cardLabel(k))+'</b><br><span class="sub">'+(regVal(c[k])?esc(c[k])+' → ':'(prázdné) → ')+'<b>'+esc(m[k])+'</b></span></span></label>').join('')
+    :'<p>Údaje na kartě odpovídají výpisu, nic se nezměnilo.</p>')+'<p class="sub">Načteno z '+esc(fname||'PDF')+'. Všechny údaje z výpisu najdeš dole na kartě.</p>';
+  const vinPdf=(m.vin||'').toUpperCase(),vinCar=(c.vin||'').trim().toUpperCase(),vinWarn=vinPdf&&vinCar&&vinPdf!==vinCar?'<div class="banner">⚠ VIN ve výpisu ('+esc(vinPdf)+') se liší od VIN na kartě ('+esc(vinCar)+'). Nejde o výpis jiného auta?</div>':'';
+  openSheet('Údaje z výpisu',vinWarn+body,{saveLabel:keys.length?'Přepsat vybrané':'Zavřít',
     onSave(){car.card=car.card||{};Array.prototype.forEach.call(document.querySelectorAll('[data-rk]'),cb=>{if(cb.checked)car.card[cb.dataset.rk]=m[cb.dataset.rk];});
-      car.card.regData=D;car.card.regFetched=todayIso();touch(car);persist();}});
+      const rd={};(rows||[]).forEach(r=>{if(r.value)rd[r.label]=r.value;});car.card.regData=rd;car.card.regFetched=todayIso();touch(car);persist();}});
 }
 function viewCar(v){
   const seg='<div class="seg"><button data-csub="card" aria-pressed="'+(carSub==='card')+'">Karta</button><button data-csub="tires" aria-pressed="'+(carSub==='tires')+'">Pneumatiky</button><button data-csub="parts" aria-pressed="'+(carSub==='parts')+'">Díly</button><button data-csub="time" aria-pressed="'+(carSub==='time')+'">Historie</button></div>';
@@ -1437,14 +1553,14 @@ function viewCar(v){
   if(carSub==='parts')return seg+viewParts(v);
   if(carSub==='time')return seg+viewTimeline(v);
   const car=vehicleById(v),c=car.card||{};
-  let h=seg+'<div class="actions"><button class="btn primary" data-act="edit-card">Upravit kartu</button><button class="btn" data-act="reg-load">🔄 Načíst z registru</button></div>'+(c.regFetched?'<p class="sub" style="margin:0 2px 6px">Naposledy z registru: '+fdate(c.regFetched)+'</p>':'');
+  let h=seg+'<div class="actions"><button class="btn primary" data-act="edit-card">Upravit kartu</button><button class="btn" data-act="reg-load">📄 Aktualizovat z PDF</button></div>'+(c.regFetched?'<p class="sub" style="margin:0 2px 6px">Naposledy aktualizováno z výpisu: '+fdate(c.regFetched)+'</p>':'<p class="sub" style="margin:0 2px 6px">Výpis „Údaje o vozidle" stáhneš jako PDF v aplikaci eTechničák nebo na dataovozidlech.cz podle VIN.</p>');
   h+='<h2>Vozidlo</h2><div class="card"><div class="kv"><span>Název</span><b>'+esc(car.name)+'</b></div>'+(car.plate?'<div class="kv"><span>SPZ</span><b>'+esc(car.plate)+'</b></div>':'')+(car.startOdo!=null?'<div class="kv"><span>Počáteční stav</span><b>'+nf(car.startOdo)+' km</b></div>':'')+'</div>';
   let any=false;
   CARD.forEach(g=>{const rows=g[1].filter(f=>c[f[0]]);if(!rows.length)return;any=true;
     h+='<h2>'+g[0]+'</h2><div class="card">'+rows.map(f=>{const ii=f[2]==='date'?insInfo(c).find(x=>x.key===f[0]):null;return '<div class="kv"><span>'+f[1]+'</span><b>'+(ii?(ii.ann?fdate(c[f[0]])+' <span class="chip '+ii.status+'">další '+fdate(ii.date)+'</span>':fdate(ii.date)+' <span class="chip '+ii.status+'">'+(ii.days<0?'vypršelo':'za '+nf(ii.days)+' dní')+'</span>'):(f[2]==='date'?fdate(c[f[0]]):esc(c[f[0]])))+'</b></div>';}).join('')+'</div>';});
   if(!any)h+='<div class="empty" style="margin-top:10px">Klepni na Upravit kartu a doplň VIN, motor, pneumatiky, oleje…</div>';
   if(c.regData&&typeof c.regData==='object'){const ks=Object.keys(c.regData).filter(k=>regVal(c.regData[k])!=='');
-    h+='<details style="margin-top:12px"><summary class="sub" style="cursor:pointer">Všechny údaje z registru ('+ks.length+')</summary><div class="card">'+ks.map(k=>'<div class="kv"><span>'+esc(regLabel(k))+'</span><b>'+esc(regVal(c.regData[k]))+'</b></div>').join('')+'</div></details>';}
+    h+='<details style="margin-top:12px"><summary class="sub" style="cursor:pointer">Všechny údaje z výpisu ('+ks.length+')</summary><div class="card">'+ks.map(k=>'<div class="kv"><span>'+esc(k)+'</span><b>'+esc(regVal(c.regData[k]))+'</b></div>').join('')+'</div></details>';}
   return h;
 }
 function viewTires(v){
@@ -1494,7 +1610,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   const id=a.dataset.id,act=a.dataset.act;
   const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'demo-add':()=>{if(!demoIds().length)makeDemo();closeSheet();render();},'demo-del':()=>{let ok=true;try{ok=confirm('Smazat ukázkové auto a všechna jeho data?');}catch(e){}if(ok){removeDemo();closeSheet();render();}},'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
-    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'reg-load':()=>{regLoad();},'dk-clear':()=>{saveSettings({dkKey:''});settingsSheet();},'new-exp':()=>expForm(),'edit-exp':()=>expForm(id),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
+    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'reg-load':regPdfPick,'new-exp':()=>expForm(),'edit-exp':()=>expForm(id),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
     'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'nag-later':()=>{lsSet(SNOOZE_KEY,String(Date.now()+3*864e5));render();},'nag-backup':()=>{if(cloud)backupNow().then(render);else fileBackup().then(m=>{toast(m.slice(0,80));render();});},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
 });
