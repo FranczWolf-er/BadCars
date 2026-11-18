@@ -753,6 +753,7 @@ function settingsSheet(){
    +'<div class="two"><div><label for="s_days">Brzy: dní předem</label><input id="s_days" inputmode="numeric" value="'+cfg().days+'"></div><div><label for="s_pct">Brzy: % intervalu v km</label><input id="s_pct" inputmode="numeric" value="'+cfg().kmPct+'"></div></div>'
    +'<label for="s_dayone">Brzy u jednorázových úkonů: dní předem</label><input id="s_dayone" inputmode="numeric" value="'+cfg().daysOne+'">'
    +'<label for="s_one">Brzy u jednorázových úkonů na km: zbývá méně než (km)</label><input id="s_one" inputmode="numeric" value="'+cfg().kmOne+'">'
+   +'<h2>Export a tisk</h2><div class="actions"><button type="button" class="btn" data-act="reports">📤 PDF a CSV pro aktuální auto</button></div>'
    +'<h2>Záloha dat</h2><div class="actions"><button type="button" class="btn" data-act="export">Export JSON</button><button type="button" class="btn" data-act="import">Import JSON</button></div>'
    +'<p class="sub">Data jsou uložena v tomto zařízení (prohlížeči). Pro jistotu je občas exportuj.</p>',{saveLabel:'Uložit',
     onSave(){
@@ -764,6 +765,133 @@ function settingsSheet(){
       saveSettings({days:Math.round(d),daysOne:Math.round(d1),kmPct:pc,kmOne:Math.round(k)});
     }});
 }
+/* ---------- export: CSV a PDF (vlastní jednoduchý generátor PDF, bez knihoven) ---------- */
+async function saveFile(name,data,mime){
+  try{const dl=window.claude&&window.claude.use?await Promise.race([window.claude.use('downloads'),new Promise(r=>setTimeout(()=>r(null),1500))]):null;
+    if(dl){try{await dl.save({filename:name,data:data});return 'Uloženo: '+name;}catch(x){return x&&x.code==='declined'?'Uložení zrušeno.':'Uložení se nepovedlo.';}}}catch(e){}
+  const blob=new Blob([data],{type:mime});
+  try{const f=new File([blob],name,{type:mime});if(navigator.canShare&&navigator.canShare({files:[f]})&&/iPhone|iPad|Android/i.test(navigator.userAgent)){await navigator.share({files:[f],title:name});return 'Soubor předán ke sdílení.';}}
+  catch(e){if(e&&e.name==='AbortError')return 'Zrušeno.';}
+  try{const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download=name;document.body.appendChild(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(a.href),4000);return 'Soubor '+name+' se stahuje.';}
+  catch(e){return 'Uložení se nepovedlo: '+e.message;}
+}
+const csvNum=(x,d)=>x==null||x===''||isNaN(x)?'':(d!=null?Number(x).toFixed(d):String(+x)).replace('.',',');
+function toCsv(head,rows){const q=v=>{v=v==null?'':String(v);return /[;"\n\r]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v;};return '﻿'+[head].concat(rows).map(r=>r.map(q).join(';')).join('\r\n');}
+const plain=h=>{const d=document.createElement('div');d.innerHTML=String(h||'');return d.textContent;};
+const inYear=(y,d)=>!y||String(d||'').startsWith(y);
+const fileBase=(v,what,y)=>('badcars-'+(vehicleById(v)||{}).name+'-'+what+(y?'-'+y:'')).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/[^a-z0-9]+/g,'-').replace(/-+$/,'');
+function csvData(kind,v,y){
+  if(kind==='fuel')return toCsv(['Datum','Tachometr km','Litry','Palivo','Cena za litr Kč','Celkem Kč','Plná nádrž','Poznámka'],live('fuelings',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date)||a.odo-b.odo).map(x=>[x.date,x.odo,csvNum(x.liters,2),x.fuel||'',csvNum(x.liters?x.total/x.liters:null,2),csvNum(x.total,2),x.full?'ano':'ne',x.note||'']));
+  if(kind==='svc')return toCsv(['Datum','Tachometr km','Popis','Dílna','Díly Kč','Práce Kč','Celkem Kč','Poznámka'],live('repairs',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.odo==null?'':x.odo,x.title,x.shop||'',csvNum(x.parts||0,2),csvNum(x.labor||0,2),csvNum(repCost(x),2),x.note||'']));
+  if(kind==='exp')return toCsv(['Datum','Druh','Částka Kč','Tachometr km','Poznámka'],live('expenses',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.cat,csvNum(x.amount,2),x.odo==null?'':x.odo,x.note||'']));
+  if(kind==='trips')return toCsv(['Datum','Odkud','Kam','Účel','Tachometr začátek','Tachometr konec','Km','Sazba Kč/km','Spotřeba l/100 km','Cena paliva Kč/l','Náhrada Kč','Poznámka'],live('trips',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date)).map(x=>[x.date,x.from||'',x.to||'',x.purpose||'',x.odoStart==null?'':x.odoStart,x.odoEnd==null?'':x.odoEnd,tripKm(x),csvNum(x.rate,2),csvNum(x.cons,1),csvNum(x.price,2),csvNum(tripPay(x),2),x.note||'']));
+  if(kind==='time'){const L={};TL_CATS.forEach(c=>L[c[0]]=c[2]);return toCsv(['Datum','Typ','Událost','Tachometr km','Částka Kč','Detail'],timelineEvents(v).filter(e=>inYear(y,e.date)).reverse().map(e=>[e.date,L[e.cat]||e.cat,plain(e.title),e.odo==null?'':e.odo,e.cost!=null?csvNum(e.cost,2):'',plain(e.sub)]));}
+  return '';
+}
+/* --- PDF --- */
+const HELV=[278,278,355,556,556,889,667,191,333,333,389,584,278,333,278,278,556,556,556,556,556,556,556,556,556,556,278,278,584,584,584,556,1015,667,667,722,722,667,611,778,722,278,500,667,556,833,722,778,667,778,722,667,611,722,667,944,667,667,611,278,278,278,469,556,333,556,556,500,556,556,278,556,556,222,222,500,222,833,556,556,556,556,333,500,278,556,500,722,500,500,500,334,260,334,584];
+const PDF_EXTRA=[['á','aacute','a'],['é','eacute','e'],['í','iacute','i'],['ó','oacute','o'],['ú','uacute','u'],['ý','yacute','y'],['č','ccaron','c'],['ď','dcaron','d'],['ě','ecaron','e'],['ň','ncaron','n'],['ř','rcaron','r'],['š','scaron','s'],['ť','tcaron','t'],['ů','uring','u'],['ž','zcaron','z'],
+ ['Á','Aacute','A'],['É','Eacute','E'],['Í','Iacute','I'],['Ó','Oacute','O'],['Ú','Uacute','U'],['Ý','Yacute','Y'],['Č','Ccaron','C'],['Ď','Dcaron','D'],['Ě','Ecaron','E'],['Ň','Ncaron','N'],['Ř','Rcaron','R'],['Š','Scaron','S'],['Ť','Tcaron','T'],['Ů','Uring','U'],['Ž','Zcaron','Z'],
+ ['ä','adieresis','a'],['ö','odieresis','o'],['ü','udieresis','u'],['×','multiply','x'],['·','periodcentered','.'],['–','endash','-'],['—','emdash','-'],['°','degree','o'],['„','quotedblbase',','],['“','quotedblleft','"'],['”','quotedblright','"'],['…','ellipsis','.'],['€','Euro','C'],['²','twosuperior','2'],['÷','divide','/'],['³','threesuperior','3']];
+const PDF_ENC={};PDF_EXTRA.forEach((e,i)=>{PDF_ENC[e[0]]=128+i;});
+function pdfW(str,size,bold){let w=0;for(const ch of String(str)){let c=ch.charCodeAt(0);const ex=PDF_EXTRA.find(e=>e[0]===ch);if(ex)c=ex[2].charCodeAt(0);if(ch==='×')w+=584;else if(ch==='–')w+=556;else if(ch==='—')w+=1000;else if(ch==='…')w+=1000;else w+=(c>=32&&c<127?HELV[c-32]:556);}return w*size/1000*(bold?1.06:1);}
+function pdfStr(str){let o='';for(const ch of String(str).replace(/→/g,'->').replace(/[  ]/g,' ')){let c=ch.charCodeAt(0);if(PDF_ENC[ch])c=PDF_ENC[ch];else if(c>126)c=63;const s=String.fromCharCode(c);o+=(s==='('||s===')'||s==='\\')?'\\'+s:(c>126?'\\'+c.toString(8):s);}return o;}
+function PdfDoc(){this.pages=[];this.W=595.28;this.H=841.89;this.M=40;this.add();}
+PdfDoc.prototype.add=function(){this.cur=[];this.pages.push(this.cur);this.y=this.H-this.M;};
+PdfDoc.prototype.text=function(x,y,s,o){o=o||{};const sz=o.size||9,f=o.bold?'F2':'F1',col=o.color||'0 0 0';let xx=x;if(o.align==='right')xx=x-pdfW(s,sz,o.bold);else if(o.align==='center')xx=x-pdfW(s,sz,o.bold)/2;
+  this.cur.push('BT /'+f+' '+sz+' Tf '+col+' rg '+xx.toFixed(2)+' '+y.toFixed(2)+' Td ('+pdfStr(s)+') Tj ET');};
+PdfDoc.prototype.line=function(x1,y1,x2,y2,w,col){this.cur.push((col||'0.8 0.8 0.8')+' RG '+(w||0.5)+' w '+x1.toFixed(2)+' '+y1.toFixed(2)+' m '+x2.toFixed(2)+' '+y2.toFixed(2)+' l S');};
+PdfDoc.prototype.rect=function(x,y,w,h,col){this.cur.push((col||'0.95 0.95 0.95')+' rg '+x.toFixed(2)+' '+y.toFixed(2)+' '+w.toFixed(2)+' '+h.toFixed(2)+' re f');};
+PdfDoc.prototype.need=function(h){if(this.y-h<this.M+20){this.add();return true;}return false;};
+PdfDoc.prototype.fit=function(s,w,size,bold){s=String(s==null?'':s);if(pdfW(s,size,bold)<=w)return s;while(s.length>1&&pdfW(s+'…',size,bold)>w)s=s.slice(0,-1);return s+'…';};
+PdfDoc.prototype.wrap=function(s,w,size,bold){const words=String(s||'').split(/\s+/);const lines=[];let cur='';words.forEach(wd=>{const t=cur?cur+' '+wd:wd;if(pdfW(t,size,bold)<=w)cur=t;else{if(cur)lines.push(cur);cur=pdfW(wd,size,bold)>w?this.fit(wd,w,size,bold):wd;}});if(cur)lines.push(cur);return lines.length?lines:[''];};
+PdfDoc.prototype.h1=function(s,sub){this.text(this.M,this.y-16,s,{size:16,bold:true});this.y-=22;if(sub){this.text(this.M,this.y-10,sub,{size:9,color:'0.35 0.35 0.35'});this.y-=16;}this.line(this.M,this.y,this.W-this.M,this.y,1,'0.2 0.5 0.45');this.y-=12;};
+PdfDoc.prototype.h2=function(s){this.need(40);this.y-=6;this.text(this.M,this.y-11,s,{size:11.5,bold:true,color:'0.1 0.35 0.3'});this.y-=18;};
+PdfDoc.prototype.kv=function(rows,cols){cols=cols||2;const cw=(this.W-2*this.M)/cols;for(let i=0;i<rows.length;i+=cols){this.need(14);for(let j=0;j<cols&&i+j<rows.length;j++){const r=rows[i+j],x=this.M+j*cw;this.text(x,this.y-9,this.fit(r[0],cw*0.45,8.5),{size:8.5,color:'0.4 0.4 0.4'});this.text(x+cw*0.46,this.y-9,this.fit(r[1],cw*0.52,9,true),{size:9,bold:true});}this.y-=14;}this.y-=4;};
+PdfDoc.prototype.table=function(cols,rows,o){o=o||{};const tw=this.W-2*this.M,sz=o.size||8.5;const tot=cols.reduce((s,c)=>s+c.w,0);cols.forEach(c=>c.px=c.w/tot*tw);
+  const head=()=>{this.rect(this.M,this.y-14,tw,14,'0.9 0.94 0.93');let x=this.M;cols.forEach(c=>{this.text(c.align==='right'?x+c.px-3:x+3,this.y-10,this.fit(c.t,c.px-6,sz,true),{size:sz,bold:true,align:c.align});x+=c.px;});this.y-=16;};
+  this.need(32);head();
+  rows.forEach((r,ri)=>{const cells=cols.map((c,i)=>c.wrap?this.wrap(r[i],c.px-6,sz).slice(0,3):[this.fit(r[i],c.px-6,sz,r.bold)]),h=Math.max.apply(null,cells.map(c=>c.length))*(sz+2)+4;
+    if(this.need(h))head();if(r.bold)this.rect(this.M,this.y-h+2,tw,h,'0.95 0.95 0.95');let x=this.M;
+    cols.forEach((c,i)=>{cells[i].forEach((ln,k)=>this.text(c.align==='right'?x+c.px-3:x+3,this.y-sz-1-k*(sz+2),ln,{size:sz,bold:!!r.bold,align:c.align}));x+=c.px;});
+    this.y-=h;this.line(this.M,this.y+1,this.W-this.M,this.y+1,0.3);});
+  this.y-=6;};
+PdfDoc.prototype.para=function(s,o){o=o||{};const sz=o.size||8.5;this.wrap(s,this.W-2*this.M,sz).forEach(l=>{this.need(sz+3);this.text(this.M,this.y-sz,l,{size:sz,color:o.color||'0.3 0.3 0.3'});this.y-=sz+3;});this.y-=4;};
+PdfDoc.prototype.build=function(title){
+  const objs=[],add=s=>{objs.push(s);return objs.length;};
+  const diff='/Differences ['+PDF_EXTRA.map((e,i)=>(128+i)+' /'+e[1]).join(' ')+']';
+  const enc=add('<< /Type /Encoding /BaseEncoding /WinAnsiEncoding '+diff+' >>');
+  const f1=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding '+enc+' 0 R >>'),f2=add('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding '+enc+' 0 R >>');
+  const pagesId=objs.length+1;objs.push(null);const kids=[];const n=this.pages.length;
+  this.pages.forEach((pg,i)=>{const foot='BT /F1 7.5 Tf 0.5 0.5 0.5 rg '+this.M+' 22 Td ('+pdfStr((title||'BadCars')+' · vytvořeno '+fdate(todayIso())+' v aplikaci BadCars')+') Tj ET BT /F1 7.5 Tf 0.5 0.5 0.5 rg '+(this.W-this.M-40)+' 22 Td ('+pdfStr('strana '+(i+1)+'/'+n)+') Tj ET';
+    const c=pg.join('\n')+'\n'+foot;const cid=add('<< /Length '+c.length+' >>\nstream\n'+c+'\nendstream');
+    kids.push(add('<< /Type /Page /Parent '+pagesId+' 0 R /MediaBox [0 0 '+this.W+' '+this.H+'] /Resources << /Font << /F1 '+f1+' 0 R /F2 '+f2+' 0 R >> >> /Contents '+cid+' 0 R >>'));});
+  objs[pagesId-1]='<< /Type /Pages /Kids ['+kids.map(k=>k+' 0 R').join(' ')+'] /Count '+kids.length+' >>';
+  const info=add('<< /Title ('+pdfStr(title||'BadCars')+') /Producer (BadCars) >>'),cat=add('<< /Type /Catalog /Pages '+pagesId+' 0 R >>');
+  let out='%PDF-1.4\n%âãÏÓ\n';const offs=[];objs.forEach((o,i)=>{offs.push(out.length);out+=(i+1)+' 0 obj\n'+o+'\nendobj\n';});
+  const xr=out.length;out+='xref\n0 '+(objs.length+1)+'\n0000000000 65535 f \n'+offs.map(o=>String(o).padStart(10,'0')+' 00000 n \n').join('')+'trailer\n<< /Size '+(objs.length+1)+' /Root '+cat+' 0 R /Info '+info+' 0 R >>\nstartxref\n'+xr+'\n%%EOF';
+  const b=new Uint8Array(out.length);for(let i=0;i<out.length;i++)b[i]=out.charCodeAt(i)&255;return b;};
+const kc=x=>x==null||isNaN(x)?'–':nf(x,0)+' Kč';
+function pdfVehHead(d,v,title,y){const car=vehicleById(v)||{},c=car.card||{};
+  d.h1(title,[car.name,car.plate,y?'rok '+y:'celé období'].filter(Boolean).join(' · '));
+  d.kv([['Značka a model',[c.make,c.model,c.variant].filter(Boolean).join(' ')||'–'],['VIN',c.vin||'–'],['Rok výroby',c.year||'–'],['1. registrace',c.reg1?fdate(c.reg1):'–'],['Motor',[c.engType,c.power?c.power+' kW':'',c.displ?c.displ+' cm³':''].filter(Boolean).join(', ')||'–'],['Palivo',c.fuel||'–'],['Stav tachometru',currentOdo(v)!=null?nf(currentOdo(v))+' km':'–'],['STK platná do',c.stkTo?fdate(c.stkTo):'–']]);}
+function pdfServiceBook(v,y){
+  const d=new PdfDoc();pdfVehHead(d,v,'Servisní knížka',y);
+  const reps=live('repairs',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  d.h2('Servis a opravy ('+reps.length+')');
+  if(reps.length){d.table([{t:'Datum',w:11},{t:'Tachometr',w:11,align:'right'},{t:'Popis',w:46,wrap:true},{t:'Dílna',w:16},{t:'Cena',w:12,align:'right'}],
+    reps.map(r=>[fdate(r.date),r.odo!=null?nf(r.odo)+' km':'',r.title,r.shop||'',kc(repCost(r))]).concat([Object.assign(['Celkem','','','',kc(reps.reduce((s,r)=>s+repCost(r),0))],{bold:true})]));}else d.para('Žádné záznamy.');
+  const tl=timelineEvents(v).filter(e=>inYear(y,e.date)).reverse();
+  const tasks=tl.filter(e=>e.cat==='task');d.h2('Provedené úkony ('+tasks.length+')');
+  if(tasks.length)d.table([{t:'Datum',w:12},{t:'Tachometr',w:12,align:'right'},{t:'Úkon',w:76,wrap:true}],tasks.map(e=>[fdate(e.date),e.odo!=null?nf(e.odo)+' km':'',plain(e.title).replace(/^Provedeno: /,'')]));else d.para('Žádné záznamy.');
+  const parts=tl.filter(e=>e.cat==='part');d.h2('Montáže a výměny dílů ('+parts.length+')');
+  if(parts.length)d.table([{t:'Datum',w:12},{t:'Tachometr',w:12,align:'right'},{t:'Díl',w:40,wrap:true},{t:'Detail',w:36,wrap:true}],parts.map(e=>[fdate(e.date),e.odo!=null?nf(e.odo)+' km':'',plain(e.title),plain(e.sub)]));else d.para('Žádné záznamy.');
+  const tires=tl.filter(e=>e.cat==='tire');if(tires.length){d.h2('Pneumatiky ('+tires.length+')');d.table([{t:'Datum',w:12},{t:'Tachometr',w:12,align:'right'},{t:'Událost',w:76,wrap:true}],tires.map(e=>[fdate(e.date),e.odo!=null?nf(e.odo)+' km':'',plain(e.title)+(e.sub?' · '+plain(e.sub):'')]));}
+  const open=live('tasks',v).filter(t=>!t.done).map(t=>({t:t,i:taskInfo(t,currentOdo(v),dailyKm(v))}));
+  if(open.length){d.h2('Plánované úkony');d.table([{t:'Úkon',w:44,wrap:true},{t:'Stav',w:16},{t:'Kdy',w:40,wrap:true}],open.sort((a,b)=>a.i.sort-b.i.sort).map(o=>[o.t.name,{ok:'v pořádku',soon:'brzy',late:'po termínu'}[o.i.status]||'',[o.i.nextKm!=null?'při '+nf(o.i.nextKm)+' km':'',o.i.nextDate?fdate(o.i.nextDate):''].filter(Boolean).join(' nebo ')]));}
+  return d.build('Servisní knížka – '+(vehicleById(v)||{}).name);
+}
+function pdfYear(v,y){
+  y=y||String(new Date().getFullYear());const d=new PdfDoc();pdfVehHead(d,v,'Roční přehled '+y,y);
+  const end=y===todayIso().slice(0,4)?todayIso():y+'-12-31',s=rangeStats(v,y+'-01-01',end);
+  d.h2('Souhrn');d.kv([['Ujeto',nf(s.km)+' km'],['Spotřeba',s.l100!=null?nf(s.l100,1)+' l/100 km':'–'],['Palivo',kc(s.fuel)+' · '+nf(s.liters,0)+' l'],['Cena paliva',s.price!=null?nf(s.price,2)+' Kč/l':'–'],['Servis',kc(s.rep)],['Ostatní výdaje',kc(s.oth)],['Fixní náklady',kc(s.fixed)],['Celkem',kc(s.total)],['Celkem na km',s.perKm!=null?nf(s.perKm,2)+' Kč':'–'],['Tankování',s.n+'×']]);
+  const MN=['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'],rows=[];let T={km:0,l:0,f:0,r:0,o:0};
+  for(let m=1;m<=12;m++){const a=y+'-'+String(m).padStart(2,'0')+'-01';if(a>end)break;const b=addMonths(a,1);const e2=addD0(b,-1)<end?addD0(b,-1):end;const r=rangeStats(v,a,e2);
+    rows.push([MN[m-1],r.km?nf(r.km)+' km':'',r.liters?nf(r.liters,0)+' l':'',kc(r.fuel),kc(r.rep),kc(r.oth),r.l100!=null?nf(r.l100,1):'']);T.km+=r.km;T.l+=r.liters;T.f+=r.fuel;T.r+=r.rep;T.o+=r.oth;}
+  d.h2('Po měsících');d.table([{t:'Měsíc',w:16},{t:'Ujeto',w:14,align:'right'},{t:'Litry',w:11,align:'right'},{t:'Palivo',w:15,align:'right'},{t:'Servis',w:15,align:'right'},{t:'Ostatní',w:15,align:'right'},{t:'l/100',w:10,align:'right'}],rows.concat([Object.assign(['Celkem',nf(T.km)+' km',nf(T.l,0)+' l',kc(T.f),kc(T.r),kc(T.o),s.l100!=null?nf(s.l100,1):''],{bold:true})]));
+  const ft=fuelByType(v,y);if(ft.length){d.h2('Podle druhu paliva');d.table([{t:'Palivo',w:30},{t:'Tankování',w:15,align:'right'},{t:'Litry',w:15,align:'right'},{t:'Kč/l',w:15,align:'right'},{t:'Celkem',w:25,align:'right'}],ft.map(x=>[x.fuel,x.n+'×',nf(x.liters,0),nf(x.cost/x.liters,2),kc(x.cost)]));}
+  const reps=live('repairs',v).filter(x=>inYear(y,x.date)).concat(live('expenses',v).filter(x=>inYear(y,x.date)).map(x=>({date:x.date,odo:x.odo,title:x.cat+(x.note?' – '+x.note:''),parts:x.amount}))).sort((a,b)=>a.date.localeCompare(b.date));
+  if(reps.length){d.h2('Servis a ostatní výdaje');d.table([{t:'Datum',w:12},{t:'Tachometr',w:12,align:'right'},{t:'Popis',w:60,wrap:true},{t:'Cena',w:16,align:'right'}],reps.map(r=>[fdate(r.date),r.odo!=null?nf(r.odo)+' km':'',r.title,kc(repCost(r))]));}
+  return d.build('Roční přehled '+y+' – '+(vehicleById(v)||{}).name);
+}
+function pdfTrips(v,y){
+  const d=new PdfDoc(),car=vehicleById(v)||{};d.h1('Kniha služebních jízd',[car.name,car.plate,y?'rok '+y:'celé období'].filter(Boolean).join(' · '));
+  const l=live('trips',v).filter(x=>inYear(y,x.date)).sort((a,b)=>a.date.localeCompare(b.date));
+  if(!l.length){d.para('Žádné služební jízdy.');return d.build('Kniha služebních jízd');}
+  const km=l.reduce((s,x)=>s+tripKm(x),0),pay=l.reduce((s,x)=>s+tripPay(x),0);
+  d.kv([['Počet jízd',String(l.length)],['Ujeto služebně',nf(km)+' km'],['Náhrady celkem',kc(pay)],['Průměr na jízdu',nf(km/l.length,0)+' km']]);
+  d.table([{t:'Datum',w:10},{t:'Trasa',w:24,wrap:true},{t:'Účel',w:20,wrap:true},{t:'Tachometr',w:17,align:'right'},{t:'Km',w:8,align:'right'},{t:'Sazba',w:10,align:'right'},{t:'Náhrada',w:11,align:'right'}],
+    l.map(x=>[fdate(x.date),[x.from,x.to].filter(Boolean).join(' – '),x.purpose||'',x.odoStart!=null&&x.odoEnd!=null?nf(x.odoStart)+'–'+nf(x.odoEnd):'',nf(tripKm(x)),nf(x.rate,2),kc(tripPay(x))]).concat([Object.assign(['Celkem','','','',nf(km),'',kc(pay)],{bold:true})]),{size:8});
+  d.para('Náhrada = km × sazba + km × spotřeba ÷ 100 × cena paliva (hodnoty uložené u každé jízdy). Jen pro vlastní přehled.');
+  return d.build('Kniha služebních jízd – '+car.name);
+}
+function exportReportsSheet(){
+  const v=vid(),years=periodYears(v).slice().sort().reverse(),cy=String(new Date().getFullYear());
+  const yearSel='<label for="ex_y">Období</label><select class="f" id="ex_y"><option value="">Celé období</option>'+years.map(y=>'<option'+(y===cy?' selected':'')+'>'+y+'</option>').join('')+'</select>';
+  openSheet('Export a tisk – '+esc((vehicleById(v)||{}).name),yearSel
+   +'<h2>PDF</h2><div class="list"><button type="button" class="row" data-ex="pdf-svc"><div class="r1"><b>📄 Servisní knížka</b></div><div class="r2">servis, úkony, díly a pneumatiky – hodí se i při prodeji auta</div></button>'
+   +'<button type="button" class="row" data-ex="pdf-year"><div class="r1"><b>📄 Roční přehled</b></div><div class="r2">souhrn nákladů a km, měsíce, druhy paliva (pro „celé období“ letošní rok)</div></button>'
+   +'<button type="button" class="row" data-ex="pdf-trips"><div class="r1"><b>📄 Kniha služebních jízd</b></div><div class="r2">jízdy, km a náhrady</div></button></div>'
+   +'<h2>CSV (Excel)</h2><div class="list">'+[['fuel','Tankování'],['svc','Servis'],['exp','Ostatní výdaje'],['trips','Služební jízdy'],['time','Časová osa (vše)']].map(x=>'<button type="button" class="row" data-ex="csv-'+x[0]+'"><div class="r1"><b>📊 '+x[1]+'</b></div></button>').join('')+'</div>'
+   +'<p class="sub" id="ex_info">CSV má středník jako oddělovač a desetinnou čárku, v Excelu se otevře rovnou správně.</p>',{saveLabel:'Zavřít',
+    after(){$('#sheet .panel').addEventListener('click',async e=>{const b=e.target.closest('[data-ex]');if(!b)return;const k=b.dataset.ex,y=val('ex_y'),info=$('#ex_info');
+      try{let name,data,mime;
+        if(k.indexOf('csv-')===0){const kind=k.slice(4);data=csvData(kind,v,y);name=fileBase(v,{fuel:'tankovani',svc:'servis',exp:'vydaje',trips:'jizdy',time:'casova-osa'}[kind],y)+'.csv';mime='text/csv';}
+        else{data=k==='pdf-svc'?pdfServiceBook(v,y):(k==='pdf-year'?pdfYear(v,y):pdfTrips(v,y));name=fileBase(v,{'pdf-svc':'servisni-knizka','pdf-year':'rocni-prehled','pdf-trips':'kniha-jizd'}[k],k==='pdf-year'?(y||cy):y)+'.pdf';mime='application/pdf';}
+        info.textContent='Připravuji…';info.textContent=await saveFile(name,data,mime);}
+      catch(x){info.textContent='Export se nepovedl: '+(x.message||x);}});}});
+}
+
 function exportSheet(){
   const json=JSON.stringify(db,null,1);
   openSheet('Export dat','<textarea id="x_json" readonly></textarea><div class="actions"><button type="button" class="btn" id="x_dl">Uložit do souboru</button><button type="button" class="btn" id="x_cp">Zkopírovat</button></div>',{
@@ -811,7 +939,7 @@ function makeDemo(){
   let d=start,o=odo0;const fu=[];
   while(d<addD(T,-3)){const gap=6+Math.floor(rnd()*9),km=Math.round(gap*(38+rnd()*30));d=addD(d,gap);if(d>T)break;o+=km;
     const l=+(km*(5.0+rnd()*1.4)/100).toFixed(2),pr=+(35.5+rnd()*5+(d>addD(T,-60)?4:0)).toFixed(2);
-    fu.push(R({date:d,odo:o,liters:l,total:+(l*pr).toFixed(1),full:false,note:['OMV','Shell','MOL','Orlen'][Math.floor(rnd()*4)]}));}
+    fu.push(R({date:d,odo:o,liters:l,total:+(l*pr).toFixed(1),fuel:'Nafta',full:false,note:['OMV','Shell','MOL','Orlen'][Math.floor(rnd()*4)]}));}
   db.fuelings.push.apply(db.fuelings,fu);
   const at=n=>fu[Math.min(fu.length-1,Math.max(0,Math.round(n*(fu.length-1))))],cur=fu[fu.length-1].odo;
   const oil=at(0.62),pads=at(0.3),bat=at(0.12),stk=addD(T,-690);
@@ -1235,6 +1363,7 @@ function viewStats(v){
    +(live('fixed',v).length?tile('Fixní náklady',money(ps.fixed),'poměrná část za sledované období')+tile('Vč. fixních na km',ps.allPerKm!=null?nf(ps.allPerKm,2)+' <small>Kč/km</small>':'–','palivo + servis + fixní'):'')+'</div>';
   {const ft=fuelByType(v,ym);if(ft.length>1||(ft.length===1&&ft[0].fuel!=='neuvedeno'))h+='<h2>Podle druhu paliva</h2><div class="card">'+ft.map(x=>'<div class="kv"><span>'+esc(x.fuel)+' <small class="sub">('+x.n+'×)</small></span><b>'+nf(x.liters,0)+' l · '+nf(x.cost/x.liters,2)+' Kč/l · '+money(x.cost)+'</b></div>').join('')+'</div>';}
   h+=yearCompare(v);
+  h+='<div class="actions" style="margin-top:10px"><button class="btn" data-act="reports">📤 Export PDF / CSV</button></div>';
   const t=tco(v),c0=(vehicleById(v)||{}).card||{};
   if(t){
     const kv=(k,x,bold)=>'<div class="kv"><span>'+k+'</span><b'+(bold?' style="font-size:17px"':'')+'>'+x+'</b></div>';
@@ -1610,7 +1739,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   const id=a.dataset.id,act=a.dataset.act;
   const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'demo-add':()=>{if(!demoIds().length)makeDemo();closeSheet();render();},'demo-del':()=>{let ok=true;try{ok=confirm('Smazat ukázkové auto a všechna jeho data?');}catch(e){}if(ok){removeDemo();closeSheet();render();}},'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
-    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'reg-load':regPdfPick,'new-exp':()=>expForm(),'edit-exp':()=>expForm(id),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
+    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;tileSel=null;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;tileSel=null;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),reports:()=>{closeSheet();exportReportsSheet();},'reg-load':regPdfPick,'new-exp':()=>expForm(),'edit-exp':()=>expForm(id),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
     'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'nag-later':()=>{lsSet(SNOOZE_KEY,String(Date.now()+3*864e5));render();},'nag-backup':()=>{if(cloud)backupNow().then(render);else fileBackup().then(m=>{toast(m.slice(0,80));render();});},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
 });
