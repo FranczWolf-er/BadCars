@@ -85,6 +85,7 @@ textarea{min-height:140px;font:12px/1.3 ui-monospace,monospace}
 .chips button[aria-pressed=true]{background:var(--acc);color:var(--acc-ink);border-color:var(--acc)}
 .yc{width:100%;border-collapse:collapse;font-size:13px}.yc th,.yc td{padding:6px 4px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}.yc th:first-child,.yc td:first-child{text-align:left;white-space:normal}.yc th{color:var(--mute);font-weight:600}.yc small{color:var(--mute)}
 .grid.editing [data-tile]{position:relative;padding-bottom:30px;touch-action:none;user-select:none;-webkit-user-select:none;cursor:grab;outline:2px dashed var(--line);outline-offset:-2px}.grid.editing [data-tile].dragging{z-index:20;cursor:grabbing;box-shadow:0 8px 24px rgba(0,0,0,.35);opacity:.95}.grid.editing .tx{position:absolute;top:-6px;right:-6px;width:28px;height:28px;border-radius:50%;border:0;background:var(--late,#d33);color:#fff;font-size:14px;line-height:28px;padding:0;z-index:2;cursor:pointer}.grid.editing .tp{position:absolute;bottom:6px;right:6px;font-size:11px;padding:2px 7px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}.addtile{border:2px dashed var(--line)!important;background:transparent!important;color:var(--mute);font-size:15px;min-height:84px;cursor:pointer}
+.tlm{display:flex;justify-content:space-between;align-items:baseline}.tlm span{font-weight:500;color:var(--mute);font-size:12px;text-transform:none}.tl{position:relative;margin:0 0 6px 14px;border-left:2px solid var(--line);padding-left:4px}.tle{display:flex;gap:10px;align-items:flex-start;width:100%;text-align:left;background:none;border:0;color:var(--ink);padding:8px 4px 8px 0;cursor:pointer;font:inherit;position:relative}.tli{flex:0 0 30px;height:30px;margin-left:-21px;border-radius:50%;background:var(--card);border:2px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:14px}.tl-svc .tli{border-color:var(--svc)}.tl-fuel .tli{border-color:var(--fuel)}.tl-task .tli{border-color:var(--ok,#2a7)}.tlb{flex:1;min-width:0}.tlb .r1{display:flex;justify-content:space-between;gap:8px}.tlb .r1 b{font-weight:600}.tlb .r1 span{white-space:nowrap;font-weight:600}.tlb .r2{display:block;color:var(--mute);font-size:13px;margin-top:2px}.tlf{flex-wrap:wrap}
 .helpbar{background:var(--okbg);color:var(--ink);border-radius:10px;padding:8px 10px;margin:8px 0;font-size:14px;display:flex;align-items:center;justify-content:space-between}.grid.helpon .card{outline:2px dashed var(--acc);outline-offset:-2px;cursor:help}
 .lc{width:100%;height:auto;display:block}.lc text{fill:var(--mute);font-size:10px}.lc .g{stroke:var(--line);stroke-width:1}.lc .ln{fill:none;stroke:var(--fuel);stroke-width:2.2;stroke-linejoin:round}.lc .av{stroke:var(--svc);stroke-width:1.2;stroke-dasharray:4 3}.lc circle.d{fill:var(--card);stroke:var(--fuel);stroke-width:2}.lc circle.h{fill:transparent;cursor:pointer}
 .tiles-ed .row2{display:flex;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line)}.tiles-ed label{flex:1;margin:0;display:flex;gap:8px;align-items:center;font-size:15px;color:var(--ink)}.tiles-ed .mv{border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:8px;width:36px;height:34px;font-size:15px;cursor:pointer}
@@ -355,7 +356,7 @@ const num=s=>{let t=String(s==null?'':s).replace(/[\s ]/g,'').replace(/(kč|czk
   if(!/^-?\d+(\.\d+)?$/.test(t))return NaN;return Number(t);};
 
 /* ---------- stav UI ---------- */
-let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tileEdit=false,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
+let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tlFilter={fuel:1,svc:1,task:1,part:1,tire:1,trip:1,other:1},tlMonths=12,tileEdit=false,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
 function vid(){
   const act=vehicleById(db.activeVehicle);
   if(act)return act.id;
@@ -1289,10 +1290,52 @@ function viewParts(v){
   h+='<p class="sub" style="margin:10px 2px 0">Název dílu napíšeš libovolně, nabídka je jen pro rychlost. Brzdy, oleje a filtry se sledují podle ujetých km, autobaterie a kapaliny podle doby v autě. „Brzy" se hlásí podle prahů v nastavení.</p>';
   return h;
 }
+const TL_CATS=[['fuel','⛽','Tankování'],['svc','🔧','Servis'],['task','✓','Úkony'],['part','⚙','Díly'],['tire','🛞','Pneu'],['trip','🚗','Jízdy'],['other','📄','Ostatní']];
+function timelineEvents(v){
+  const E=[],car=vehicleById(v)||{},c=car.card||{},add=(o)=>{if(o.date&&requireDate(o.date))E.push(o);};
+  live('fuelings',v).forEach(f=>add({cat:'fuel',date:f.date,odo:f.odo,title:'Tankování '+nf(f.liters,1)+' l',sub:(f.liters>0?nf(f.total/f.liters,2)+' Kč/l':'')+(f.full?' · plná':'')+(f.note?' · '+esc(f.note):''),cost:f.total,act:'edit-fuel',id:f.id}));
+  live('repairs',v).forEach(r=>add({cat:'svc',date:r.date,odo:r.odo,title:esc(r.title),sub:esc(r.shop||''),cost:repCost(r),act:'edit-repair',id:r.id}));
+  live('tasks',v).forEach(t=>{
+    if(t.done&&t.doneDate)add({cat:'task',date:t.doneDate,odo:t.doneOdo,title:'Provedeno: '+esc(t.name),sub:'jednorázový úkon',act:'edit-task',id:t.id});
+    else if(!isOneTime(t)){if(t.lastDate)add({cat:'task',date:t.lastDate,odo:t.lastOdo,title:'Provedeno: '+esc(t.name),sub:'opakovaný úkon',act:'edit-task',id:t.id});
+      (t.history||[]).forEach(hh=>{if(hh&&hh.date)add({cat:'task',date:hh.date,odo:hh.odo,title:'Provedeno: '+esc(t.name),sub:'opakovaný úkon',act:'edit-task',id:t.id});});}});
+  const parts=live('parts',v);
+  parts.forEach(x=>{const prev=parts.find(y=>y!==x&&y.name===x.name&&y.removedDate===x.date),i=prev?partInfo(prev,null):null;
+    add({cat:'part',date:x.date,odo:x.odo,title:(prev?'Výměna: ':'Montáž: ')+esc(x.name),sub:[x.spec?esc(x.spec):'',prev&&i&&i.km!=null?'předchozí ujel '+nf(i.km)+' km':(prev&&i?'předchozí '+partAge(i.days):'')].filter(Boolean).join(' · '),act:'edit-part',id:x.id});});
+  const tires=live('tires',v),tn=id=>{const t=tires.find(x=>x.id===id);return t?tireName(t):'sada pneumatik';};
+  live('tireEvents',v).forEach(e=>add({cat:'tire',date:e.date,odo:e.odo,title:(e.type==='off'?'Sundány: ':'Nasazeny: ')+esc(tn(e.tireId)),sub:'',act:'edit-mount',id:e.id,extra:' data-tire="'+e.tireId+'"'}));
+  tires.forEach(t=>(t.treads||[]).forEach(m=>add({cat:'tire',date:m.date,title:'Měření dezénu: '+nf(m.mm,1)+' mm',sub:esc(tireName(t)),act:'edit-tire',id:t.id})));
+  live('trips',v).forEach(x=>add({cat:'trip',date:x.date,odo:x.odoEnd,title:'Služební jízda '+nf(tripKm(x))+' km',sub:esc([x.from,x.to].filter(Boolean).join(' → ')+(x.purpose?' · '+x.purpose:'')),act:'edit-trip',id:x.id}));
+  live('fixed',v).forEach(x=>add({cat:'other',date:x.year+'-01-01',title:esc(x.name)+' '+x.year,sub:'fixní náklad za rok',cost:x.amount,act:'edit-fixed',id:x.id}));
+  [[c.reg1,'1. registrace vozidla'],[c.regCz,'1. registrace v ČR'],[c.buyDate,'Pořízení vozidla'+(c.buyPrice?' za '+money(cnum(c.buyPrice)||0):'')],[c.sellDate,'Prodej vozidla'+(c.sellPrice?' za '+money(cnum(c.sellPrice)||0):'')],[car.startDate,'Začátek evidence v BadCars']].forEach(x=>{if(x[0])add({cat:'other',date:x[0],odo:x[1].indexOf('Pořízení')===0&&c.buyOdo?cnum(c.buyOdo):(x[1].indexOf('Začátek')===0?car.startOdo:null),title:x[1],sub:'',act:'edit-card',id:''});});
+  const ord={other:0,part:1,svc:2,task:3,tire:4,fuel:5,trip:6};
+  return E.sort((a,b)=>b.date.localeCompare(a.date)||((b.odo||0)-(a.odo||0))||(ord[b.cat]-ord[a.cat]));
+}
+function viewTimeline(v){
+  const all=timelineEvents(v),ev=all.filter(e=>tlFilter[e.cat]);
+  let h='<div class="chips tlf" style="margin:0 0 10px">'+TL_CATS.map(c=>'<button type="button" data-tlf="'+c[0]+'" aria-pressed="'+(!!tlFilter[c[0]])+'">'+c[1]+' '+c[2]+'</button>').join('')+'</div>';
+  if(!all.length)return h+'<div class="empty">Zatím žádné záznamy.</div>';
+  if(!ev.length)return h+'<div class="empty">Nic neodpovídá vybraným filtrům.</div>';
+  const limit=addMonths(todayIso().slice(0,7)+'-01',-(tlMonths-1)),shown=ev.filter(e=>e.date>=limit),older=ev.length-shown.length;
+  const list=shown.length?shown:ev.slice(0,30);
+  const odoAll=all.filter(e=>e.odo!=null).map(e=>({d:e.date,o:e.odo}));
+  let mon='';
+  list.forEach((e,i)=>{const m=e.date.slice(0,7);
+    if(m!==mon){mon=m;const me=list.filter(x=>x.date.slice(0,7)===m),cost=me.reduce((s,x)=>s+(x.cost||0),0);
+      const od=odoAll.filter(x=>x.d.slice(0,7)===m).map(x=>x.o),bef=odoAll.filter(x=>x.d.slice(0,7)<m).map(x=>x.o),km=od.length?Math.max.apply(null,od)-(bef.length?Math.max.apply(null,bef):Math.min.apply(null,od)):0;
+      h+=(i?'</div>':'')+'<h2 class="tlm">'+monthLabel(m)+'<span>'+(km>0?nf(km)+' km · ':'')+(cost?money(cost):'')+'</span></h2><div class="tl">';}
+    const C=TL_CATS.find(c=>c[0]===e.cat);
+    h+='<button type="button" class="tle tl-'+e.cat+'" data-act="'+e.act+'" data-id="'+e.id+'"'+(e.extra||'')+'><span class="tli">'+C[1]+'</span><span class="tlb"><span class="r1"><b>'+e.title+'</b>'+(e.cost?'<span>'+money(e.cost)+'</span>':'')+'</span><span class="r2">'+fdate(e.date)+(e.odo!=null?' · '+nf(e.odo)+' km':'')+(e.sub?' · '+e.sub:'')+'</span></span></button>';});
+  h+='</div>';
+  if(older>0&&shown.length)h+='<div class="actions"><button type="button" class="btn" data-act="tl-more">Načíst starší ('+older+')</button></div>';
+  h+='<p class="sub" style="margin:10px 2px 0">'+nf(ev.length)+(ev.length===1?' událost':(ev.length<5?' události':' událostí'))+'. Klepnutím na událost ji otevřeš a upravíš.</p>';
+  return h;
+}
 function viewCar(v){
-  const seg='<div class="seg"><button data-csub="card" aria-pressed="'+(carSub==='card')+'">Karta</button><button data-csub="tires" aria-pressed="'+(carSub==='tires')+'">Pneumatiky</button><button data-csub="parts" aria-pressed="'+(carSub==='parts')+'">Díly</button></div>';
+  const seg='<div class="seg"><button data-csub="card" aria-pressed="'+(carSub==='card')+'">Karta</button><button data-csub="tires" aria-pressed="'+(carSub==='tires')+'">Pneumatiky</button><button data-csub="parts" aria-pressed="'+(carSub==='parts')+'">Díly</button><button data-csub="time" aria-pressed="'+(carSub==='time')+'">Historie</button></div>';
   if(carSub==='tires')return seg+viewTires(v);
   if(carSub==='parts')return seg+viewParts(v);
+  if(carSub==='time')return seg+viewTimeline(v);
   const car=vehicleById(v),c=car.card||{};
   let h=seg+'<div class="actions"><button class="btn primary" data-act="edit-card">Upravit kartu</button></div>';
   h+='<h2>Vozidlo</h2><div class="card"><div class="kv"><span>Název</span><b>'+esc(car.name)+'</b></div>'+(car.plate?'<div class="kv"><span>SPZ</span><b>'+esc(car.plate)+'</b></div>':'')+(car.startOdo!=null?'<div class="kv"><span>Počáteční stav</span><b>'+nf(car.startOdo)+' km</b></div>':'')+'</div>';
@@ -1334,6 +1377,7 @@ function render(){
 }
 document.addEventListener('click',e=>{
   const sb=e.target.closest('[data-sub]');if(sb){tasksSub=sb.dataset.sub;render();return;}
+  const tf=e.target.closest('[data-tlf]');if(tf){const k=tf.dataset.tlf,on=Object.keys(tlFilter).filter(x=>tlFilter[x]);if(on.length===TL_CATS.length){TL_CATS.forEach(c=>tlFilter[c[0]]=c[0]===k?1:0);}else{tlFilter[k]=tlFilter[k]?0:1;if(!Object.keys(tlFilter).some(x=>tlFilter[x]))TL_CATS.forEach(c=>tlFilter[c[0]]=1);}render();return;}
   const fb=e.target.closest('[data-fsub]');if(fb){fuelSub=fb.dataset.fsub;render();return;}
   const cb=e.target.closest('[data-csub]');if(cb){carSub=cb.dataset.csub;render();return;}
   if(tileEdit){const et=e.target.closest('.grid.editing [data-tile]');if(et&&!e.target.closest('button')){e.preventDefault();return;}}
@@ -1345,7 +1389,7 @@ document.addEventListener('click',e=>{
   const a=e.target.closest('[data-act]');if(!a)return;
   const id=a.dataset.id,act=a.dataset.act;
   const m={close:closeSheet,settings:settingsSheet,'new-veh':()=>vehicleForm(),'demo-add':()=>{if(!demoIds().length)makeDemo();closeSheet();render();},'demo-del':()=>{let ok=true;try{ok=confirm('Smazat ukázkové auto a všechna jeho data?');}catch(e){}if(ok){removeDemo();closeSheet();render();}},'edit-veh':()=>vehicleForm(id),'new-fuel':()=>fuelForm(),'edit-fuel':()=>fuelForm(id),
-    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
+    'new-odo':()=>odoForm(),'edit-odo':()=>odoForm(id),'new-repair':()=>repairForm(),'edit-repair':()=>repairForm(id),'new-task':()=>taskForm(),'edit-card':cardForm,'edit-tiles':()=>{tileEdit=true;helpMode=false;render();},'tiles-done':()=>{tileEdit=false;render();},'tiles-reset':()=>{saveSettings({tiles:defaultTiles(vid()),tilePeriod:{}});render();},'tile-rm':()=>{saveSettings({tiles:tileOrder(vid()).filter(x=>x!==id)});render();},'tile-per':()=>{const pp=Object.assign({},(db.settings||{}).tilePeriod||{});pp[id]=pp[id]==='year'?'all':'year';saveSettings({tilePeriod:pp});render();},'tile-add':tileAddSheet,'help-mode':()=>{helpMode=!helpMode;render();},health:healthSheet,'new-tire':()=>tireForm(),'edit-tire':()=>tireForm(id),'mount-tire':()=>mountForm(id,null,'on'),'unmount-tire':()=>mountForm(id,null,'off'),'tread-tire':()=>treadForm(id),'edit-mount':()=>mountForm(a.dataset.tire,id),'new-part':()=>partForm(),'tl-more':()=>{tlMonths+=12;render();},'new-trip':()=>tripForm(),'edit-trip':()=>tripForm(id),'trip-set':tripSettings,'edit-part':()=>partForm(id),'replace-part':()=>replaceForm(id),trip:tripForm,'new-fixed':()=>fixedForm(),'edit-fixed':()=>fixedForm(id),'edit-task':()=>taskForm(id),'done-task':()=>doneForm(id),
     'export':exportSheet,backup:()=>{backupNow();},'app-reload':()=>{location.reload();},'nag-later':()=>{lsSet(SNOOZE_KEY,String(Date.now()+3*864e5));render();},'nag-backup':()=>{if(cloud)backupNow().then(render);else fileBackup().then(m=>{toast(m.slice(0,80));render();});},'cloud-login':()=>cloudLogin(a.dataset.p||lsGet(WAS_KEY)||provList()[0]),'cloud-logout':()=>{if(confirmLogout()){cloudLogout();settingsSheet();}},'file-backup':()=>{fileBackup().then(m=>{const i=$('#fileinfo');if(i)i.textContent=m;});},'file-restore':()=>{closeSheet();importSheet();},'restore-offer':()=>{restoreNow();},restore:()=>{restoreNow().then(n=>{const i=$('#syncinfo');if(i&&n!=null)i.textContent='Ze zálohy bylo doplněno záznamů: '+n+'.';});},'import':importSheet};
   if(m[act])m[act]();
 });
