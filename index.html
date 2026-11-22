@@ -1023,7 +1023,7 @@ function tireState(t){
   const a=age==null?null:(age>=10?'late':(age>=6?'soon':'ok')),r=lt?(lt.mm<lim[0]?'late':(lt.mm<lim[1]?'soon':'ok')):null;
   const w={late:2,soon:1,ok:0};if(a==null&&r==null)return null;return [a,r].filter(Boolean).sort((x,y)=>w[y]-w[x])[0];
 }
-const FUELS=['Natural 95','Natural 98','Natural 100','Nafta','Nafta prémiová','LPG','CNG','Jiné'];
+const FUELS=['Natural 95','Natural 95+','Natural 98','Natural 100','Nafta','Nafta prémiová','LPG','CNG','Jiné'];
 function defFuel(v,exId){const l=live('fuelings',v).filter(x=>x.fuel&&x.id!==exId).sort((a,b)=>b.date.localeCompare(a.date))[0];if(l)return l.fuel;const c=((vehicleById(v)||{}).card||{}).fuel||'';return /naft|diesel|NM/i.test(c)?'Nafta':(/LPG/i.test(c)?'LPG':(/CNG/i.test(c)?'CNG':'Natural 95'));}
 const EXP_CATS=['Mytí a čištění','Parkování','Mýto a dálniční poplatky','Příslušenství','Kapaliny a drogerie','Pokuty','Jiné'];
 const PART_CATS=[['Přední brzdové destičky',40000,null],['Zadní brzdové destičky',50000,null],['Přední brzdové kotouče',80000,null],['Zadní brzdové kotouče',100000,null],['Motorový olej',15000,12],['Olej v převodovce',60000,null],['Olej v rozvodovce / diferenciálu',60000,null],['Vzduchový filtr',30000,null],['Palivový filtr',40000,null],['Kabinový filtr',null,12],['Zapalovací svíčky',40000,null],['Rozvody',120000,60],['Autobaterie',null,60],['Brzdová kapalina',null,24],['Chladicí kapalina',null,60],['Stěrače',null,12],['Tlumiče',100000,null],['Jiný díl',null,null]];
@@ -1798,6 +1798,10 @@ function applyPatches(){
       const t=/naft|diesel/i.test(c)?'Nafta':(/\b100\b/.test(n)?'Natural 100':(/\b98\b/.test(n)?'Natural 98':(/\b95/.test(n)||/benz|BA/i.test(c)?'Natural 95':null)));
       if(t){f.fuel=t;touch(f);}});
     mark('p10-fuel-type');
+  }
+  if(!done('p11-fuel-95plus')){
+    db.fuelings.forEach(f=>{if(!f.deleted&&f.fuel==='Natural 95'&&/95\s*\+/.test(f.note||'')){f.fuel='Natural 95+';touch(f);}});
+    mark('p11-fuel-95plus');
   }
   if(!done('p9-stk-register')){
     const L={'2cea01d5-cd17-5130-a440-79625a7483ba':'2026-09-30','652763f9-2795-542f-b092-967c695a04b8':'2026-06-13'};
