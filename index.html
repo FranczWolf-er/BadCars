@@ -387,9 +387,10 @@ function evDate(s){if(!requireDate(s))return 'Zadej datum.';if(s>todayIso())retu
 let lastWarn='';
 function warnOnce(key,msg){if(lastWarn===key){lastWarn='';return null;}lastWarn=key;return '⚠ '+msg+' Pokud je to správně, klepni znovu na Uložit.';}
 
+const fuelModeSeg=(m)=>'<div class="seg" style="margin:0 0 10px"><button type="button" data-fmode="fuel" aria-pressed="'+(m==='fuel')+'">⛽ Tankování</button><button type="button" data-fmode="odo" aria-pressed="'+(m==='odo')+'">📍 Jen tachometr</button></div>';
 function fuelForm(id){
   const v=vid(),ex=id?db.fuelings.find(x=>x.id===id):null,cur=currentOdo(v);
-  const body='<div class="two"><div><label for="f_date">Datum</label><input id="f_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+  const body=(ex?'':fuelModeSeg('fuel'))+'<div class="two"><div><label for="f_date">Datum</label><input id="f_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
    +'<div><label for="f_odo">Tachometr (km)</label><input id="f_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>'
    +'<div class="two"><div><label for="f_l">Litry</label><input id="f_l" inputmode="decimal" value="'+(ex?ex.liters:'')+'"></div>'
    +'<div><label for="f_ppl">Cena za litr (Kč)</label><input id="f_ppl" inputmode="decimal" value="'+(ex&&ex.liters?+(ex.total/ex.liters).toFixed(2):'')+'"></div></div>'
@@ -433,16 +434,19 @@ function fuelForm(id){
 }
 function odoForm(id){
   const v=vid(),ex=id?db.odos.find(x=>x.id===id):null,cur=currentOdo(v);
-  openSheet(ex?'Upravit stav tachometru':'Zapsat tachometr',
-   '<div class="two"><div><label for="o_date">Datum</label><input id="o_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
-   +'<div><label for="o_odo">Tachometr (km)</label><input id="o_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>',{
+  openSheet(ex?'Upravit stav tachometru':'Nové tankování',(ex?'':fuelModeSeg('odo'))
+   +'<div class="two"><div><label for="o_date">Datum</label><input id="o_date" type="date" value="'+(ex?ex.date:todayIso())+'"></div>'
+   +'<div><label for="o_odo">Tachometr (km)</label><input id="o_odo" inputmode="numeric" placeholder="'+(cur!=null?'nad '+nf(cur):'')+'" value="'+(ex?ex.odo:'')+'"></div></div>'
+   +'<label for="o_note">Poznámka</label><input id="o_note" value="'+esc(ex&&ex.note||'')+'">'
+   +'<p class="sub">Zápis bez tankování zpřesní aktuální stav km pro úkony, díly a nájezd. Na spotřebu nemá vliv.</p>',{
     onSave(){
       const date=val('o_date'),odo=num(val('o_odo'));
       {const de=evDate(date);if(de)return de;}
       if(!(odo>0))return 'Zadej stav tachometru.';
       const e=checkOdo(v,date,odo,ex&&ex.id);if(e)return e;
       const rec=ex||{id:uid(),vehicleId:v};
-      Object.assign(rec,{date:date,odo:Math.round(odo)});touch(rec);if(!ex)db.odos.push(rec);persist();
+      if(live('odos',v).some(x=>x!==ex&&x.date===date&&Math.round(x.odo)===Math.round(odo))){const w=warnOnce('o'+date+odo,'Stejný stav tachometru už je zapsaný.');if(w)return w;}
+      Object.assign(rec,{date:date,odo:Math.round(odo),note:val('o_note').trim()});touch(rec);if(!ex)db.odos.push(rec);persist();
     },
     onDelete:ex?()=>{ex.deleted=true;touch(ex);persist();}:null
   });
@@ -1255,10 +1259,10 @@ function viewFuelTab(v){
 }
 function viewFuel(v){
   const segs=fuelSegments(v),map={};segs.forEach(s=>map[s.id]=s);
-  const list=live('fuelings',v).sort((a,b)=>b.date.localeCompare(a.date)||b.odo-a.odo);
+  const list=live('fuelings',v).concat(live('odos',v).map(o=>Object.assign({_odo:1},o))).sort((a,b)=>b.date.localeCompare(a.date)||b.odo-a.odo);
   let h='<div class="actions"><button class="btn primary" data-act="new-fuel">⛽ Nové tankování</button></div>';
   if(!list.length)return h+'<div class="empty">Zatím žádné tankování.</div>';
-  h+='<div class="list">'+list.map(f=>{const s=map[f.id];
+  h+='<div class="list">'+list.map(f=>{if(f._odo)return '<button class="row" data-act="edit-odo" data-id="'+f.id+'"><div class="r1"><b>'+fdate(f.date)+' · '+nf(f.odo)+' km</b><span class="sub">📍 tachometr</span></div>'+(f.note?'<div class="r2">'+esc(f.note)+'</div>':'')+'</button>';const s=map[f.id];
     return '<button class="row" data-act="edit-fuel" data-id="'+f.id+'"><div class="r1"><b>'+fdate(f.date)+' · '+nf(f.odo)+' km</b><span>'+money(f.total)+'</span></div><div class="r2">'+nf(f.liters,2)+' l'+(f.fuel?' '+esc(f.fuel):'')+' · '+nf(f.total/f.liters,2)+' Kč/l'+(f.full?'':' · částečné')+(s?' · <b>'+nf(s.l100,1)+' l/100 km</b>':'')+(f.note?' · '+esc(f.note):'')+'</div></button>';}).join('')+'</div>';
   return h;
 }
@@ -1480,6 +1484,7 @@ const TL_CATS=[['fuel','⛽','Tankování'],['svc','🔧','Servis'],['exp','💳
 function timelineEvents(v){
   const E=[],car=vehicleById(v)||{},c=car.card||{},add=(o)=>{if(o.date&&requireDate(o.date))E.push(o);};
   live('fuelings',v).forEach(f=>add({cat:'fuel',date:f.date,odo:f.odo,title:'Tankování '+nf(f.liters,1)+' l'+(f.fuel?' '+esc(f.fuel):''),sub:(f.liters>0?nf(f.total/f.liters,2)+' Kč/l':'')+(f.full?' · plná':'')+(f.note?' · '+esc(f.note):''),cost:f.total,act:'edit-fuel',id:f.id}));
+  live('odos',v).forEach(x=>add({cat:'fuel',date:x.date,odo:x.odo,title:'📍 Stav tachometru',sub:esc(x.note||''),act:'edit-odo',id:x.id}));
   live('expenses',v).forEach(x=>add({cat:'exp',date:x.date,odo:x.odo,title:esc(x.cat||'Výdaj'),sub:esc(x.note||''),cost:x.amount,act:'edit-exp',id:x.id}));
   live('repairs',v).forEach(r=>add({cat:'svc',date:r.date,odo:r.odo,title:esc(r.title),sub:esc(r.shop||''),cost:repCost(r),act:'edit-repair',id:r.id}));
   live('tasks',v).forEach(t=>{
@@ -1510,7 +1515,7 @@ function viewTimeline(v){
   list.forEach((e,i)=>{const m=e.date.slice(0,7);
     if(m!==mon){mon=m;const me=list.filter(x=>x.date.slice(0,7)===m),cost=me.reduce((s,x)=>s+(x.cost||0),0);
       const od=odoAll.filter(x=>x.d.slice(0,7)===m).map(x=>x.o),bef=odoAll.filter(x=>x.d.slice(0,7)<m).map(x=>x.o),km=od.length?Math.max.apply(null,od)-(bef.length?Math.max.apply(null,bef):Math.min.apply(null,od)):0;
-      h+=(i?'</div>':'')+'<h2 class="tlm">'+monthLabel(m)+'<span>'+(km>0?nf(km)+' km · ':'')+(cost?money(cost):'')+'</span></h2><div class="tl">';}
+      h+=(i?'</div>':'')+'<h2 class="tlm">'+monthLabel(m)+'<span>'+[km>0?nf(km)+' km':'',cost?money(cost):''].filter(Boolean).join(' · ')+'</span></h2><div class="tl">';}
     const C=TL_CATS.find(c=>c[0]===e.cat);
     h+='<button type="button" class="tle tl-'+e.cat+'" data-act="'+e.act+'" data-id="'+e.id+'"'+(e.extra||'')+'><span class="tli">'+C[1]+'</span><span class="tlb"><span class="r1"><b>'+e.title+'</b>'+(e.cost?'<span>'+money(e.cost)+'</span>':'')+'</span><span class="r2">'+fdate(e.date)+(e.odo!=null?' · '+nf(e.odo)+' km':'')+(e.sub?' · '+e.sub:'')+'</span></span></button>';});
   h+='</div>';
@@ -1725,6 +1730,7 @@ function render(){
 document.addEventListener('click',e=>{
   const sb=e.target.closest('[data-sub]');if(sb){tasksSub=sb.dataset.sub;render();return;}
   const tf=e.target.closest('[data-tlf]');if(tf){const k=tf.dataset.tlf,on=Object.keys(tlFilter).filter(x=>tlFilter[x]);if(on.length===TL_CATS.length){TL_CATS.forEach(c=>tlFilter[c[0]]=c[0]===k?1:0);}else{tlFilter[k]=tlFilter[k]?0:1;if(!Object.keys(tlFilter).some(x=>tlFilter[x]))TL_CATS.forEach(c=>tlFilter[c[0]]=1);}render();return;}
+  const fm=e.target.closest('[data-fmode]');if(fm){e.preventDefault();const keep={d:($('#f_date')||$('#o_date')||{}).value,o:($('#f_odo')||$('#o_odo')||{}).value};if(fm.dataset.fmode==='odo')odoForm();else fuelForm();const d2=$('#f_date')||$('#o_date'),o2=$('#f_odo')||$('#o_odo');if(d2&&keep.d)d2.value=keep.d;if(o2&&keep.o)o2.value=keep.o;return;}
   const fb=e.target.closest('[data-fsub]');if(fb){fuelSub=fb.dataset.fsub;render();return;}
   const cb=e.target.closest('[data-csub]');if(cb){carSub=cb.dataset.csub;render();return;}
   if(tileEdit){const et=e.target.closest('.grid.editing [data-tile]'),btn=e.target.closest('button');
