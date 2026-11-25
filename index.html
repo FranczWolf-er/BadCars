@@ -15,13 +15,13 @@
 <style>
 :root{
   --bg:#f4f6f7;--card:#fff;--ink:#14201f;--mute:#5b6b69;--line:#dbe2e1;
-  --acc:#0f766e;--acc-ink:#fff;--fuel:#0f766e;--svc:#d97706;
+  --acc:#0f766e;--acc-ink:#fff;--fuel:#0f766e;--svc:#d97706;--oth:#7c3aed;--fix:#64748b;
   --ok:#166534;--okbg:#dcfce7;--soon:#92400e;--soonbg:#fef3c7;--late:#991b1b;--latebg:#fee2e2;
   --danger:#b91c1c;
 }
 @media (prefers-color-scheme:dark){
   :root{--bg:#0e1514;--card:#17211f;--ink:#e6efed;--mute:#9db0ad;--line:#2a3836;
-  --acc:#2dd4bf;--acc-ink:#042f2a;--fuel:#2dd4bf;--svc:#fbbf24;
+  --acc:#2dd4bf;--acc-ink:#042f2a;--fuel:#2dd4bf;--svc:#fbbf24;--oth:#a78bfa;--fix:#94a3b8;
   --ok:#86efac;--okbg:#14351f;--soon:#fcd34d;--soonbg:#3b2a0a;--late:#fca5a5;--latebg:#431414;--danger:#f87171;}
 }
 *{box-sizing:border-box}
@@ -362,7 +362,7 @@ const num=s=>{let t=String(s==null?'':s).replace(/[\s ]/g,'').replace(/(kč|czk
   if(!/^-?\d+(\.\d+)?$/.test(t))return NaN;return Number(t);};
 
 /* ---------- stav UI ---------- */
-let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tlFilter={fuel:1,svc:1,exp:1,task:1,part:1,tire:1,trip:1,other:1},tlMonths=12,tileEdit=false,tileSel=null,homeD=null,fuelSub='fuel',statMetric='l100',statAgg='month',lcInfo=null;
+let tab='home',pYear='',pMonth='',tasksSub='rep',carSub='card',helpMode=false,tlFilter={fuel:1,svc:1,exp:1,task:1,part:1,tire:1,trip:1,other:1},tlMonths=12,tileEdit=false,tileSel=null,homeD=null,fuelSub='fuel',statSub='sum',statMetric='l100',statAgg='month',lcInfo=null;
 function vid(){
   const act=vehicleById(db.activeVehicle);
   if(act)return act.id;
@@ -1362,14 +1362,46 @@ function lineChart(pts,d,unit){
    +'<text x="'+L+'" y="'+(H-8)+'">'+sh(pts[0].date)+'</text><text x="'+(W-R)+'" y="'+(H-8)+'" text-anchor="end">'+sh(pts[pts.length-1].date)+'</text></svg>'
    +'<div class="sub" id="lc_read" style="margin-top:4px">Poslední: <b>'+nf(last,d)+'</b> · Průměr: <b>'+nf(avg,d)+'</b> · Min: <b>'+nf(mn,d)+'</b> · Max: <b>'+nf(mx,d)+'</b> '+esc(unit)+'<br>Čárkovaně průměr. Klepni na bod pro hodnotu.</div>';
 }
-function viewStats(v){
-  const months=rankMonths(v,6),max=Math.max.apply(null,months.map(m=>m.fuel+m.svc).concat([1]));
-  let h='';
+function periodPicker(v,title){
   const years=periodYears(v);if(pYear&&years.indexOf(pYear)<0)pYear='';
   const MN=['leden','únor','březen','duben','květen','červen','červenec','srpen','září','říjen','listopad','prosinec'];
-  const ym=pYear?(pMonth?pYear+'-'+pMonth:pYear):'',ps=periodStats(v,ym);
-  h+='<h2>Celkem za období</h2><div class="two"><div><label for="p_year">Rok</label><select class="f" id="p_year"><option value="">Vše</option>'+years.map(y=>'<option'+(y===pYear?' selected':'')+'>'+y+'</option>').join('')+'</select></div>'
+  return '<h2>'+title+'</h2><div class="two"><div><label for="p_year">Rok</label><select class="f" id="p_year"><option value="">Vše</option>'+years.map(y=>'<option'+(y===pYear?' selected':'')+'>'+y+'</option>').join('')+'</select></div>'
    +'<div><label for="p_month">Měsíc</label><select class="f" id="p_month"'+(pYear?'':' disabled')+'><option value="">Celý rok</option>'+MN.map((m,i)=>{const k=String(i+1).padStart(2,'0');return '<option value="'+k+'"'+(k===pMonth?' selected':'')+'>'+m+'</option>';}).join('')+'</select></div></div>';
+}
+function costSplit(v,ym){
+  const inP=d=>!ym||d.startsWith(ym),fx=live('fixed',v);
+  const fuel=sumCost(live('fuelings',v).filter(x=>inP(x.date)));
+  const svc=live('repairs',v).filter(r=>inP(r.date)).reduce((s,r)=>s+repCost(r),0);
+  const oth=expSum(v,inP);
+  let fixed=0;
+  if(!ym)fixed=fx.reduce((s,x)=>s+(x.amount||0),0);
+  else if(ym.length===4)fixed=fx.filter(x=>x.year===+ym).reduce((s,x)=>s+(x.amount||0),0);
+  else{const y=+ym.slice(0,4),m=+ym.slice(5,7),last=new Date(y,m,0).getDate();fixed=fixedShare(v,ym+'-01',ym+'-'+String(last).padStart(2,'0'));}
+  return [{k:'Palivo',c:'var(--fuel)',v:fuel},{k:'Servis a opravy',c:'var(--svc)',v:svc},{k:'Ostatní výdaje',c:'var(--oth)',v:oth},{k:'Fixní náklady',c:'var(--fix)',v:fixed}];
+}
+function pieChart(parts){
+  const tot=parts.reduce((s,p)=>s+p.v,0),R=70,C=2*Math.PI*R;let off=0,g='';
+  const nz=parts.filter(p=>p.v>0);
+  nz.forEach(p=>{const len=p.v/tot*C;
+    g+='<circle cx="100" cy="100" r="'+R+'" fill="none" stroke="'+p.c+'" stroke-width="34" stroke-dasharray="'+(nz.length>1?Math.max(len-1.5,0.5):len).toFixed(2)+' '+C.toFixed(2)+'" stroke-dashoffset="'+(-off).toFixed(2)+'" transform="rotate(-90 100 100)"/>';off+=len;});
+  return '<svg viewBox="0 0 200 200" style="width:220px;max-width:70%;display:block;margin:6px auto" role="img" aria-label="Koláčový graf rozložení nákladů">'+g
+   +'<text x="100" y="96" text-anchor="middle" style="font-size:11px;fill:var(--mute)">Celkem</text><text x="100" y="114" text-anchor="middle" style="font-size:15px;font-weight:700;fill:var(--ink)">'+esc(money(tot))+'</text></svg>';
+}
+function viewCostSplit(v){
+  let h=periodPicker(v,'Rozložení nákladů');
+  const ym=pYear?(pMonth?pYear+'-'+pMonth:pYear):'';
+  const parts=costSplit(v,ym),tot=parts.reduce((s,p)=>s+p.v,0);
+  if(tot<=0)return h+'<div class="empty" style="margin-top:10px">V tomto období nejsou žádné náklady.</div>';
+  h+='<div class="card" style="margin-top:10px">'+pieChart(parts)
+   +parts.map(p=>'<div class="kv"><span><i style="display:inline-block;width:11px;height:11px;border-radius:3px;background:'+p.c+';margin-right:7px;vertical-align:-1px"></i>'+p.k+'</span><b>'+money(p.v)+' <small class="sub">· '+nf(p.v/tot*100,p.v/tot<0.1&&p.v>0?1:0)+' %</small></b></div>').join('')+'</div>';
+  h+='<p class="sub" style="margin:6px 2px">Fixní náklady: za rok celá roční částka, za měsíc poměrná část, za „Vše“ součet všech let. Náhrady za služební jízdy se nezapočítávají.</p>';
+  return h;
+}
+function viewStats(v){
+  const seg='<div class="seg"><button data-ssub="sum" aria-pressed="'+(statSub==='sum')+'">Přehled</button><button data-ssub="split" aria-pressed="'+(statSub==='split')+'">Rozložení nákladů</button></div>';
+  if(statSub==='split')return seg+viewCostSplit(v);
+  let h=seg+periodPicker(v,'Celkem za období');
+  const ym=pYear?(pMonth?pYear+'-'+pMonth:pYear):'',ps=periodStats(v,ym);
   h+='<div class="grid" style="margin-top:10px">'+tile('Palivo',money(ps.spent),nf(ps.liters,0)+' l · '+ps.n+' tankování')+tile('Servis',money(ps.rep),ps.repN+' zápisů')
    +(ps.othN?tile('Ostatní výdaje',money(ps.oth),ps.othN+' zápisů'):'')+tile('Celkové výdaje',money(ps.spent+ps.rep+ps.oth))+tile('Ujeto',ps.km>0?nf(ps.km)+' <small>km</small>':'–')
    +tile('Spotřeba',ps.l100!=null?nf(ps.l100,1)+' <small>l/100 km</small>':'–',ps.l100!=null?'odhad z litrů a km':'málo dat v období')
@@ -1752,6 +1784,7 @@ document.addEventListener('click',e=>{
   const tf=e.target.closest('[data-tlf]');if(tf){const k=tf.dataset.tlf,on=Object.keys(tlFilter).filter(x=>tlFilter[x]);if(on.length===TL_CATS.length){TL_CATS.forEach(c=>tlFilter[c[0]]=c[0]===k?1:0);}else{tlFilter[k]=tlFilter[k]?0:1;if(!Object.keys(tlFilter).some(x=>tlFilter[x]))TL_CATS.forEach(c=>tlFilter[c[0]]=1);}render();return;}
   const fm=e.target.closest('[data-fmode]');if(fm){e.preventDefault();const keep={d:($('#f_date')||$('#o_date')||{}).value,o:($('#f_odo')||$('#o_odo')||{}).value};if(fm.dataset.fmode==='odo')odoForm();else fuelForm();const d2=$('#f_date')||$('#o_date'),o2=$('#f_odo')||$('#o_odo');if(d2&&keep.d)d2.value=keep.d;if(o2&&keep.o)o2.value=keep.o;return;}
   const fb=e.target.closest('[data-fsub]');if(fb){fuelSub=fb.dataset.fsub;render();return;}
+  const ssb=e.target.closest('[data-ssub]');if(ssb){statSub=ssb.dataset.ssub;render();return;}
   const cb=e.target.closest('[data-csub]');if(cb){carSub=cb.dataset.csub;render();return;}
   if(tileEdit){const et=e.target.closest('.grid.editing [data-tile]'),btn=e.target.closest('button');
     const setSel=id=>{tileSel=id;Array.prototype.forEach.call(document.querySelectorAll('.grid.editing [data-tile]'),x=>{if(x.dataset.tile===id)x.setAttribute('data-sel','1');else x.removeAttribute('data-sel');});};

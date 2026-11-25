@@ -1,7 +1,7 @@
 // Service worker: aplikace běží i offline.
 // Strategie „nejdřív síť“: online se vždy načte aktuální verze, mezipaměť slouží jen bez připojení.
 // Při změně souborů zvyšte číslo verze, aby zařízení zobrazila upozornění na novou verzi.
-const CACHE = 'badcars-v21';
+const CACHE = 'badcars-v22';
 const FILES = ['./', 'index.html', 'config.js', 'manifest.webmanifest', 'icon-180.png', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
